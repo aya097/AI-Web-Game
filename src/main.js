@@ -120,22 +120,287 @@ function createDecoy(position) {
     const group = new THREE.Group();
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(2, 24, 24), decoyMaterial);
     group.add(mesh);
+
+    const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.7, 20, 20),
+        new THREE.MeshStandardMaterial({
+            color: 0xb8f7ff,
+            emissive: 0x58d0ff,
+            emissiveIntensity: 1.8,
+            metalness: 0.1,
+            roughness: 0.2,
+        })
+    );
+    group.add(core);
+
+    const band = new THREE.Mesh(
+        new THREE.TorusGeometry(2.2, 0.12, 12, 36),
+        new THREE.MeshStandardMaterial({
+            color: 0x7ad7ff,
+            emissive: 0x2a6bff,
+            emissiveIntensity: 0.8,
+            metalness: 0.6,
+            roughness: 0.3,
+        })
+    );
+    band.rotation.x = Math.PI / 2;
+    group.add(band);
+
+    const finMaterial = new THREE.MeshStandardMaterial({
+        color: 0xd7f3ff,
+        emissive: 0x5ad1ff,
+        emissiveIntensity: 0.6,
+        metalness: 0.4,
+        roughness: 0.4,
+    });
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.6, 0.12), finMaterial);
+    fin.position.set(0, 0, 2.0);
+    group.add(fin);
+    const fin2 = fin.clone();
+    fin2.rotation.y = Math.PI / 2;
+    group.add(fin2);
     group.position.copy(position);
+
+    const hitFlash = new THREE.Mesh(
+        new THREE.RingGeometry(2.2, 2.9, 32),
+        new THREE.MeshStandardMaterial({
+            color: 0x7fe3ff,
+            emissive: 0x58d0ff,
+            emissiveIntensity: 2.6,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        })
+    );
+    const hitFlashInner = new THREE.Mesh(
+        new THREE.RingGeometry(1.2, 1.8, 20),
+        new THREE.MeshStandardMaterial({
+            color: 0xb8f7ff,
+            emissive: 0x7ad7ff,
+            emissiveIntensity: 2.4,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        })
+    );
+    const hitBurst = new THREE.PointLight(0x7ad7ff, 0, 18, 2);
+    const burstSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.6, 16, 16),
+        new THREE.MeshStandardMaterial({
+            color: 0xa6f0ff,
+            emissive: 0x7ad7ff,
+            emissiveIntensity: 2.8,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        })
+    );
+    const shockwave = new THREE.Mesh(
+        new THREE.RingGeometry(2.8, 3.6, 36),
+        new THREE.MeshStandardMaterial({
+            color: 0x9fe6ff,
+            emissive: 0x7ad7ff,
+            emissiveIntensity: 2.0,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        })
+    );
+    const sparkGeometry = new THREE.BufferGeometry();
+    const sparkCount = 32;
+    const sparkPositions = new Float32Array(sparkCount * 3);
+    for (let i = 0; i < sparkCount; i += 1) {
+        const r = 0.6 + Math.random() * 0.8;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        sparkPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        sparkPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        sparkPositions[i * 3 + 2] = r * Math.cos(phi);
+    }
+    sparkGeometry.setAttribute("position", new THREE.BufferAttribute(sparkPositions, 3));
+    const sparkMaterial = new THREE.PointsMaterial({
+        color: 0x9fe6ff,
+        size: 0.14,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+    });
+    const sparks = new THREE.Points(sparkGeometry, sparkMaterial);
+
+    const destroySphere = new THREE.Mesh(
+        new THREE.SphereGeometry(1.4, 20, 20),
+        new THREE.MeshStandardMaterial({
+            color: 0xffc08a,
+            emissive: 0xff7a3a,
+            emissiveIntensity: 3.4,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        })
+    );
+    const destroyRing = new THREE.Mesh(
+        new THREE.RingGeometry(3.2, 4.6, 36),
+        new THREE.MeshStandardMaterial({
+            color: 0xffc08a,
+            emissive: 0xff7a3a,
+            emissiveIntensity: 3.0,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        })
+    );
+    const destroyRingInner = new THREE.Mesh(
+        new THREE.RingGeometry(1.6, 2.4, 24),
+        new THREE.MeshStandardMaterial({
+            color: 0xfff1c1,
+            emissive: 0xffb36b,
+            emissiveIntensity: 2.6,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        })
+    );
+    destroyRing.rotation.x = Math.PI / 2;
+    destroyRingInner.rotation.x = Math.PI / 2;
+    hitBurst.position.set(0, 0, 0);
+    hitFlash.rotation.x = Math.PI / 2;
+    hitFlashInner.rotation.x = Math.PI / 2;
+    shockwave.rotation.x = Math.PI / 2;
+    group.add(hitFlash);
+    group.add(hitFlashInner);
+    group.add(hitBurst);
+    group.add(burstSphere);
+    group.add(sparks);
+    group.add(shockwave);
+    group.add(destroySphere);
+    group.add(destroyRing);
+    group.add(destroyRingInner);
 
     return {
         name: "Decoy",
         group,
         colliderRadius: 2,
         isDecoy: true,
+        maxHp: 30,
+        hp: 30,
         _hitTimer: 0,
+        _flashTimer: 0,
+        _destroyTimer: 0,
+        _debrisTimer: 0,
+        _deathDelay: 0,
+        _respawnTimer: 0,
+        respawnDelay: 6.0,
         onHit() {
             this._hitTimer = 2.0;
             mesh.material = decoyHitMaterial;
+            this._flashTimer = 0.5;
+        },
+        onDamage(amount) {
+            if (this.hp <= 0) return;
+            this.hp = Math.max(0, this.hp - amount);
+            this.onHit();
+            if (this.hp === 0) {
+                this._destroyTimer = 0.9;
+                this._debrisTimer = 0.6;
+                this._deathDelay = 0.35;
+            }
         },
         update(dt) {
             if (this._hitTimer > 0) {
                 this._hitTimer = Math.max(0, this._hitTimer - dt);
                 if (this._hitTimer === 0) {
+                    mesh.material = decoyMaterial;
+                }
+            }
+
+            if (this._flashTimer > 0) {
+                this._flashTimer = Math.max(0, this._flashTimer - dt);
+                const t = this._flashTimer / 0.5;
+                hitFlash.material.opacity = 0.95 * t;
+                hitFlash.scale.setScalar(1 + (1 - t) * 1.4);
+                hitFlash.rotation.z += dt * 2.5;
+
+                hitFlashInner.material.opacity = 1.0 * t;
+                hitFlashInner.scale.setScalar(1 + (1 - t) * 0.8);
+                hitFlashInner.rotation.z -= dt * 3.2;
+
+                shockwave.material.opacity = 0.8 * t;
+                shockwave.scale.setScalar(1 + (1 - t) * 2.4);
+                shockwave.rotation.z += dt * 4.5;
+
+                hitBurst.intensity = 3.2 * t;
+                burstSphere.material.opacity = 0.9 * t;
+                burstSphere.scale.setScalar(1 + (1 - t) * 3.0);
+
+                sparkMaterial.opacity = 1.0 * t;
+                sparks.scale.setScalar(1 + (1 - t) * 2.2);
+            } else {
+                hitFlash.material.opacity = 0;
+                hitFlash.scale.setScalar(1);
+                hitFlashInner.material.opacity = 0;
+                hitFlashInner.scale.setScalar(1);
+                shockwave.material.opacity = 0;
+                shockwave.scale.setScalar(1);
+                hitBurst.intensity = 0;
+                burstSphere.material.opacity = 0;
+                burstSphere.scale.setScalar(1);
+                sparkMaterial.opacity = 0;
+                sparks.scale.setScalar(1);
+            }
+
+            if (this._destroyTimer > 0) {
+                this._destroyTimer = Math.max(0, this._destroyTimer - dt);
+                const t = this._destroyTimer / 0.9;
+                destroySphere.material.opacity = 1.0 * t;
+                destroySphere.scale.setScalar(1 + (1 - t) * 4.2);
+                destroyRing.material.opacity = 0.9 * t;
+                destroyRing.scale.setScalar(1 + (1 - t) * 3.4);
+                destroyRing.rotation.z += dt * 4.2;
+                destroyRingInner.material.opacity = 0.9 * t;
+                destroyRingInner.scale.setScalar(1 + (1 - t) * 2.0);
+                destroyRingInner.rotation.z -= dt * 5.4;
+            } else {
+                destroySphere.material.opacity = 0;
+                destroySphere.scale.setScalar(1);
+                destroyRing.material.opacity = 0;
+                destroyRing.scale.setScalar(1);
+                destroyRingInner.material.opacity = 0;
+                destroyRingInner.scale.setScalar(1);
+            }
+
+            if (this._deathDelay > 0) {
+                this._deathDelay = Math.max(0, this._deathDelay - dt);
+                if (this._deathDelay === 0) {
+                    this.group.visible = false;
+                    this._respawnTimer = this.respawnDelay;
+                }
+            }
+
+            if (this._debrisTimer > 0) {
+                this._debrisTimer = Math.max(0, this._debrisTimer - dt);
+                const t = this._debrisTimer / 0.6;
+                sparkMaterial.opacity = Math.max(sparkMaterial.opacity, 0.9 * t);
+                sparks.scale.setScalar(Math.max(sparks.scale.x, 1 + (1 - t) * 3.2));
+            }
+
+            if (this._respawnTimer > 0) {
+                this._respawnTimer = Math.max(0, this._respawnTimer - dt);
+                if (this._respawnTimer === 0) {
+                    this.hp = this.maxHp;
+                    this.group.visible = true;
                     mesh.material = decoyMaterial;
                 }
             }
@@ -296,8 +561,12 @@ const weaponSystem = {
         muzzleFlashTimer = 0.06;
         fireCooldown = fireCooldownDuration;
 
-        if (hitEntity?.onHit) {
-            hitEntity.onHit();
+        if (hitEntity) {
+            if (typeof hitEntity.onDamage === "function") {
+                hitEntity.onDamage(10);
+            } else if (typeof hitEntity.onHit === "function") {
+                hitEntity.onHit();
+            }
         }
     },
 };

@@ -10,8 +10,76 @@ export class FunnelDrone {
             metalness: 0.2,
             roughness: 0.4,
         });
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), bodyMaterial);
-        this.group.add(body);
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), bodyMaterial);
+        this.group.add(core);
+
+        const shellMaterial = new THREE.MeshStandardMaterial({
+            color: 0xd7f3ff,
+            emissive: 0x5ad1ff,
+            emissiveIntensity: 0.8,
+            metalness: 0.4,
+            roughness: 0.3,
+        });
+        const shell = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 16), shellMaterial);
+        shell.rotation.x = Math.PI / 2;
+        shell.position.set(0, 0, 0.15);
+        this.group.add(shell);
+
+        const finMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8fd4ff,
+            emissive: 0x2a6bff,
+            emissiveIntensity: 0.7,
+            metalness: 0.2,
+            roughness: 0.4,
+        });
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.6), finMaterial);
+        fin.position.set(0, 0.08, -0.1);
+        this.group.add(fin);
+        const fin2 = fin.clone();
+        fin2.rotation.y = Math.PI / 2;
+        this.group.add(fin2);
+
+        const glowRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.18, 0.28, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0x7fe3ff,
+                emissive: 0x58d0ff,
+                emissiveIntensity: 1.4,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending,
+            })
+        );
+        glowRing.rotation.x = Math.PI / 2;
+        glowRing.position.set(0, 0, -0.25);
+        this.group.add(glowRing);
+
+        this.trailSegments = [];
+        this._trailAges = [];
+        this._trailTimer = 0;
+        this._trailInterval = 0.02;
+        this._trailMaxAge = 0.7;
+        this._trailIndex = 0;
+
+        const trailMaterial = new THREE.MeshStandardMaterial({
+            color: 0x7fe3ff,
+            emissive: 0x58d0ff,
+            emissiveIntensity: 1.2,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+
+        for (let i = 0; i < 24; i += 1) {
+            const segment = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), trailMaterial.clone());
+            segment.visible = false;
+            this.trailSegments.push(segment);
+            this._trailAges.push(this._trailMaxAge);
+            if (scene) scene.add(segment);
+        }
 
         const beamMaterial = new THREE.MeshStandardMaterial({
             color: 0x7fe3ff,
@@ -34,6 +102,7 @@ export class FunnelDrone {
         this._beamTimer = 0;
         this._beamOrigin = new THREE.Vector3();
         this._beamTarget = new THREE.Vector3();
+        this._lastPosition = new THREE.Vector3();
 
         if (scene) {
             scene.add(this.group);
@@ -69,6 +138,12 @@ export class FunnelDrone {
     }
 
     update(dt) {
+        if (this._lastPosition.lengthSq() === 0) {
+            this._lastPosition.copy(this.group.position);
+        }
+        if (this.mode === "orbit" && this.targetPosition) {
+            this.group.lookAt(this.targetPosition);
+        }
         if (this._beamTimer > 0) {
             this._beamTimer = Math.max(0, this._beamTimer - dt);
             const direction = this._beamTarget.clone().sub(this._beamOrigin).normalize();
@@ -83,11 +158,15 @@ export class FunnelDrone {
 
         if (this.mode === "dock") {
             this.group.position.lerp(this.homePosition, 1 - Math.exp(-this.lerpSpeed * dt));
+            this._trailTimer = 0;
+            this._hideTrail();
             return;
         }
 
         if (this.mode === "return") {
             this.group.position.lerp(this.homePosition, 1 - Math.exp(-this.returnSpeed * dt));
+            this.group.lookAt(this.homePosition);
+            this._updateTrail(dt);
             if (this.group.position.distanceTo(this.homePosition) < 0.4) {
                 this.mode = "dock";
             }
@@ -103,6 +182,42 @@ export class FunnelDrone {
             orbitOffset.y += this.orbitHeight;
             const desired = this.targetPosition.clone().add(orbitOffset);
             this.group.position.lerp(desired, 1 - Math.exp(-this.lerpSpeed * dt));
+            this._updateTrail(dt);
         }
+    }
+
+    _hideTrail() {
+        this.trailSegments.forEach((segment, index) => {
+            segment.visible = false;
+            this._trailAges[index] = this._trailMaxAge;
+            segment.material.opacity = 0;
+        });
+    }
+
+    _updateTrail(dt) {
+        this._trailTimer += dt;
+        if (this._trailTimer >= this._trailInterval) {
+            this._trailTimer = 0;
+            const segment = this.trailSegments[this._trailIndex];
+            segment.visible = true;
+            segment.position.copy(this.group.position);
+            segment.scale.setScalar(1);
+            this._trailAges[this._trailIndex] = 0;
+            this._trailIndex = (this._trailIndex + 1) % this.trailSegments.length;
+        }
+
+        this.trailSegments.forEach((segment, index) => {
+            this._trailAges[index] += dt;
+            const age = this._trailAges[index];
+            const t = Math.min(1, age / this._trailMaxAge);
+            const opacity = (1 - t) * 0.8;
+            if (opacity <= 0.01) {
+                segment.visible = false;
+                segment.material.opacity = 0;
+                return;
+            }
+            segment.material.opacity = opacity;
+            segment.scale.setScalar(1 + t * 0.6);
+        });
     }
 }

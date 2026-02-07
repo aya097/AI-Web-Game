@@ -22,6 +22,7 @@ export class FunnelWeapon {
         this.returnSpeed = 7.0;
         this.beamDuration = 0.08;
         this.deployArrivalDistance = 1.0;
+        this.damage = 6;
 
         this._state = "idle";
         this._cyclesRemaining = 0;
@@ -138,7 +139,9 @@ export class FunnelWeapon {
                     drone.fireAt(origin, targetPos, this.beamDuration);
                 });
 
-                if (typeof target.onHit === "function") {
+                if (typeof target.onDamage === "function") {
+                    target.onDamage(this.damage);
+                } else if (typeof target.onHit === "function") {
                     target.onHit();
                 }
 
