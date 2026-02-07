@@ -28,6 +28,9 @@
 8. 描画
 9. UI更新
 
+※更新の起点は `Game`。`Game` が `World` と各 `System` を順序通りに呼び出す。
+`World` はエンティティ集合と空間インデックスを保持し、`System` は `World` に対して読み書きする。
+
 ## 主要インターフェース
 ### IEntity
 - `update(dt)`
@@ -59,14 +62,17 @@
 ### Game
 - 役割: ゲーム進行管理
 - 所持: `Scene` / `World` / `InputSystem` / `UI` / `Audio`
+- 更新起点: すべての `System` 更新は `Game` が呼び出す
 
 ### World
 - 役割: 空間とエンティティ管理
 - 所持: `entities[]`, `spatialIndex`
+- 所有権: エンティティの生存管理（生成/破棄は `EntityManager` 経由）
 
 ### EntityManager
 - 役割: 生成/破棄/検索
 - 依存: `EntityFactory`
+- 所有権: 生成と破棄の受付、`World` への登録/解除を実行
 
 ### Player (IEntity, IControllable)
 - 役割: 自機
@@ -112,6 +118,32 @@
 - `Player` は `IMovement`/`ITargeting`/`IWeapon` の抽象に依存
 - `Enemy` は `IAIController` の抽象に依存
 - `Weapon` は `ITargeting` に依存可能（ファンネル向け）
+
+## イベントバス仕様
+- 方式: 同期イベント（同一フレーム内で即時ディスパッチ）
+- 順序: 登録順。`Game` の更新順序を跨いでのディスパッチは禁止（同一 `System` 内で完結）
+- 用途: UI通知、効果音/エフェクト、実績/ログ
+- 代表イベント:
+  - `DamageApplied { sourceId, targetId, amount, isShield }`
+  - `EntityDestroyed { entityId, reason }`
+  - `LockOnAcquired { ownerId, targetId }`
+  - `WeaponFired { ownerId, weaponId }`
+
+## データ駆動仕様
+- フォーマット: JSON（`/assets/config/*.json`）
+- バージョン: `schemaVersion` を必須化し、破壊的変更は `v+1` を作成
+- 検証: 起動時にJSONスキーマ検証（不正値はログ + デフォルトにフォールバック）
+- ホットリロード: 開発時のみ有効（変更検知で再読み込み、実行中エンティティは次リスポーンから反映）
+
+## 時間管理/物理
+- タイムステップ: 固定 1/60 秒。`Game` がアキュムレータで積分し、`dt` は最大 1/15 にクランプ
+- 積分: Semi-Implicit Euler
+- 速度上限: `IMovement` で速度ベクトルのノルムをクランプ
+
+## 衝突/空間分割
+- 形状: 自機/敵機/ファンネルは球、障害物は球/カプセル
+- 空間分割: 固定グリッド（セルサイズ 50m）
+- 目的: 60fps維持のため当たり判定候補をセル内に限定
 
 ## 拡張例
 - 新武装: `IWeapon` 実装を追加し `WeaponSlot` に装着
