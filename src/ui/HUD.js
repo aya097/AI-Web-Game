@@ -1,12 +1,27 @@
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
 export class HUD {
-    constructor(element, playerMovement) {
+    constructor(element, { player, movement, targeting }) {
         this.element = element;
-        this.playerMovement = playerMovement;
+        this.player = player;
+        this.movement = movement;
+        this.targeting = targeting;
     }
 
     render() {
-        if (!this.element || !this.playerMovement) return;
-        const speed = this.playerMovement.velocity.length().toFixed(1);
-        this.element.textContent = `Speed: ${speed} m/s`;
+        if (!this.element || !this.movement || !this.player) return;
+        const speed = this.movement.velocity.length().toFixed(1);
+        const hp = Math.max(0, this.player.hp).toFixed(0);
+        const shield = Math.max(0, this.player.shield).toFixed(0);
+        let lockText = "None";
+        const target = this.targeting?.getCurrentTarget();
+        if (target?.group) {
+            const distance = target.group
+                .getWorldPosition(new THREE.Vector3())
+                .distanceTo(this.player.group.getWorldPosition(new THREE.Vector3()))
+                .toFixed(1);
+            lockText = `${target.name || "Target"} (${distance}m)`;
+        }
+        this.element.textContent = `Speed: ${speed} m/s | HP: ${hp}/${this.player.maxHp} | Shield: ${shield}/${this.player.maxShield} | Lock: ${lockText}`;
     }
 }

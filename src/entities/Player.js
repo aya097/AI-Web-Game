@@ -4,6 +4,17 @@ export class Player {
     constructor(movement) {
         this.movement = movement;
         this.group = new THREE.Group();
+        this.weapons = [];
+        this.colliderRadius = 1.2;
+        this.maxHp = 100;
+        this.hp = this.maxHp;
+        this.maxShield = 60;
+        this.shield = this.maxShield;
+        this.shieldRegenDelay = 2.0;
+        this.shieldRegenRate = 10;
+        this._timeSinceDamage = 0;
+        this.collisionDamage = 5;
+        this._collisionCooldown = 0;
 
         const mainMaterial = new THREE.MeshStandardMaterial({ color: 0xdbe8ff, metalness: 0.6, roughness: 0.35 });
         const accentMaterial = new THREE.MeshStandardMaterial({ color: 0x1b2a55, metalness: 0.5, roughness: 0.5 });
@@ -128,7 +139,42 @@ export class Player {
         this.input = input;
     }
 
+    addWeapon(weapon) {
+        this.weapons.push(weapon);
+        if (typeof weapon.setOwner === "function") {
+            weapon.setOwner(this);
+        }
+    }
+
+    onDamage(amount) {
+        this._timeSinceDamage = 0;
+        let remaining = amount;
+        if (this.shield > 0) {
+            const absorbed = Math.min(this.shield, remaining);
+            this.shield -= absorbed;
+            remaining -= absorbed;
+        }
+        if (remaining > 0) {
+            this.hp = Math.max(0, this.hp - remaining);
+        }
+        return this.hp <= 0;
+    }
+
+    onCollision() {
+        if (this._collisionCooldown > 0) return;
+        this.onDamage(this.collisionDamage);
+        this._collisionCooldown = 0.5;
+    }
+
     update(dt) {
+        if (this._collisionCooldown > 0) {
+            this._collisionCooldown = Math.max(0, this._collisionCooldown - dt);
+        }
+        this._timeSinceDamage += dt;
+        if (this._timeSinceDamage >= this.shieldRegenDelay && this.shield < this.maxShield) {
+            this.shield = Math.min(this.maxShield, this.shield + this.shieldRegenRate * dt);
+        }
+
         const { x, y } = this.input.mouseDelta;
         this.rotation.y -= x * this.mouseSensitivity;
         this.rotation.x -= y * this.mouseSensitivity;
@@ -140,5 +186,18 @@ export class Player {
 
         this.movement.applyForces(this.group, this.input, dt);
         this.movement.integrate(this.group, this.input, dt);
+
+        this.weapons.forEach((weapon) => {
+            if (weapon?.inputKey) {
+                if (this.input[weapon.inputKey]) {
+                    if (typeof weapon.triggerStart === "function") weapon.triggerStart();
+                } else if (typeof weapon.triggerEnd === "function") {
+                    weapon.triggerEnd();
+                }
+            }
+            if (typeof weapon.update === "function") {
+                weapon.update(dt, this.input);
+            }
+        });
     }
 }

@@ -45,6 +45,41 @@
             opacity: 0.8;
             pointer-events: none;
         }
+
+        #lockon {
+            position: fixed;
+            width: 48px;
+            height: 48px;
+            border: 2px solid rgba(120, 220, 255, 0.9);
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(120, 220, 255, 0.8);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: none;
+            animation: lockonPulse 0.9s ease-in-out infinite;
+        }
+
+        #lockon::after {
+            content: "";
+            position: absolute;
+            inset: 8px;
+            border: 1px dashed rgba(120, 220, 255, 0.7);
+            border-radius: 50%;
+        }
+
+        @keyframes lockonPulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 0.9;
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.08);
+                opacity: 0.6;
+            }
+        }
     </style>
 </head>
 
@@ -52,6 +87,7 @@
     <div id="overlay"><span>クリックでポインターロック開始<br />WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / Left Ctrl
             ブースト<br />左クリック 射撃 / R ロックオン / F ファンネル<br />マウスで視点操作</span></div>
     <div id="hud"></div>
+    <div id="lockon"></div>
     <script type="module" src="./src/main.js"></script>
 </body>
 
