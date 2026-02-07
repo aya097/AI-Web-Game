@@ -2,6 +2,9 @@ import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { InputSystem } from "./systems/InputSystem.js";
 import { SixDoFMovement } from "./movement/SixDoFMovement.js";
 import { Player } from "./entities/Player.js";
+import { Game } from "./core/Game.js";
+import { World } from "./core/World.js";
+import { HUD } from "./ui/HUD.js";
 
 const SETTINGS = {
     background: 0x05060a,
@@ -26,7 +29,6 @@ const SETTINGS = {
         directional: { color: 0xffffff, intensity: 1.1, position: [10, 20, 10] },
         ambient: { color: 0x4a4a4a },
     },
-    timeStepMax: 1 / 15,
 };
 
 const overlay = document.getElementById("overlay");
@@ -107,35 +109,41 @@ scene.add(player.group);
 
 const cameraOffset = SETTINGS.camera.offset.clone();
 const cameraTarget = new THREE.Vector3();
-const followEnabled = true;
 const cameraOffsetWorld = new THREE.Vector3();
 
-let lastTime = performance.now();
+const world = new World();
+world.add(player);
 
-function updateCamera() {
-    if (!followEnabled) return;
-    cameraOffsetWorld.copy(cameraOffset).applyQuaternion(player.group.quaternion);
-    const desired = player.group.position.clone().add(cameraOffsetWorld);
-    camera.position.copy(desired);
-    cameraTarget.copy(player.group.position);
-    camera.lookAt(cameraTarget);
-}
+const hudView = new HUD(hud, playerMovement);
 
-function updateHud() {
-    const speed = playerMovement.velocity.length().toFixed(1);
-    hud.textContent = `Speed: ${speed} m/s`;
-}
+const playerInputSystem = {
+    beforeUpdate: ({ input: inputState }) => {
+        player.applyInput(inputState);
+    },
+};
+
+const cameraFollowSystem = {
+    afterUpdate: () => {
+        cameraOffsetWorld.copy(cameraOffset).applyQuaternion(player.group.quaternion);
+        const desired = player.group.position.clone().add(cameraOffsetWorld);
+        camera.position.copy(desired);
+        cameraTarget.copy(player.group.position);
+        camera.lookAt(cameraTarget);
+    },
+};
+
+const game = new Game({
+    renderer,
+    scene,
+    camera,
+    input,
+    world,
+    hud: hudView,
+    systems: [playerInputSystem, cameraFollowSystem],
+});
 
 function animate(time) {
-    const dt = Math.min((time - lastTime) / 1000, SETTINGS.timeStepMax);
-    lastTime = time;
-
-    const inputState = input.getState();
-    player.update(inputState, dt);
-    updateCamera();
-    updateHud();
-
-    renderer.render(scene, camera);
+    game.update(time);
     requestAnimationFrame(animate);
 }
 

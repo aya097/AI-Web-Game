@@ -113,19 +113,32 @@ export class Player {
         this.rotation = new THREE.Euler(0, 0, 0, "YXZ");
         this.rollSpeed = THREE.MathUtils.degToRad(160);
         this.mouseSensitivity = 0.002;
+        this.input = {
+            move: { forward: 0, right: 0, up: 0 },
+            roll: 0,
+            boost: false,
+            mouseDelta: { x: 0, y: 0 },
+            fire: false,
+            lockOn: false,
+            funnel: false,
+        };
     }
 
-    update(input, dt) {
-        const { x, y } = input.mouseDelta;
+    applyInput(input) {
+        this.input = input;
+    }
+
+    update(dt) {
+        const { x, y } = this.input.mouseDelta;
         this.rotation.y -= x * this.mouseSensitivity;
         this.rotation.x -= y * this.mouseSensitivity;
         const pitchLimit = THREE.MathUtils.degToRad(60);
         this.rotation.x = THREE.MathUtils.clamp(this.rotation.x, -pitchLimit, pitchLimit);
-        this.rotation.z += input.roll * this.rollSpeed * dt;
+        this.rotation.z += this.input.roll * this.rollSpeed * dt;
 
         this.group.quaternion.setFromEuler(this.rotation);
 
-        this.movement.applyForces(this.group, input, dt);
-        this.movement.integrate(this.group, input, dt);
+        this.movement.applyForces(this.group, this.input, dt);
+        this.movement.integrate(this.group, this.input, dt);
     }
 }

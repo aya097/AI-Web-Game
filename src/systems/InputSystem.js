@@ -56,13 +56,19 @@ export class InputSystem {
         const right = (this.keys.has("KeyD") ? 1 : 0) + (this.keys.has("KeyA") ? -1 : 0);
         const up = (this.keys.has("Space") ? 1 : 0) + (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") ? -1 : 0);
         const roll = (this.keys.has("KeyE") ? 1 : 0) + (this.keys.has("KeyQ") ? -1 : 0);
-        const boost = this.keys.has("KeyV");
+        const boost = this.keys.has("ControlLeft");
+        const fire = this.mouseDown;
+        const lockOn = this.keys.has("KeyR");
+        const funnel = this.keys.has("KeyF");
         const mouseDelta = this.consumeMouseDelta();
 
         return {
             move: { forward, right, up },
             roll,
             boost,
+            fire,
+            lockOn,
+            funnel,
             mouseDelta,
         };
     }
