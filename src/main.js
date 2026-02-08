@@ -633,7 +633,7 @@ const entityFactory = {
                 fireRate: stats.fireRate ?? SETTINGS.weapons.playerLaser.fireRate,
                 beamColor: SETTINGS.weapons.playerLaser.beamColor,
                 beamEmissive: SETTINGS.weapons.playerLaser.beamEmissive,
-                beamRadius: SETTINGS.weapons.playerLaser.beamRadius * 1.4,
+                beamRadius: SETTINGS.weapons.enemyLaser.beamRadius,
                 beamDuration: SETTINGS.weapons.playerLaser.beamDuration,
                 getMuzzleWorldPosition: () =>
                     ally.weaponMuzzle

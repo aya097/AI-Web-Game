@@ -27,7 +27,8 @@ export class AllyAI {
 
         const enemies = this.world.query().filter((entity) => {
             if (!entity?.group || entity === this.owner) return false;
-            if (entity.team !== "enemy") return false;
+            const isEnemy = entity.team === "enemy" || entity.isEnemy;
+            if (!isEnemy) return false;
             if (typeof entity.hp === "number" && entity.hp <= 0) return false;
             return true;
         });
@@ -35,12 +36,13 @@ export class AllyAI {
         if (!enemies.length) return null;
 
         const engageRadius = Math.max(this.attackDistance * 1.6, 240);
+        const emergencyRadius = Math.max(120, this.standoffDistance * 0.6);
         let best = null;
         let bestDist = Infinity;
 
         enemies.forEach((entity) => {
             const dist = ownerPos.distanceTo(entity.group.getWorldPosition(new THREE.Vector3()));
-            if (dist <= engageRadius && dist < bestDist) {
+            if (dist <= emergencyRadius && dist < bestDist) {
                 bestDist = dist;
                 best = entity;
             }
@@ -52,6 +54,16 @@ export class AllyAI {
             if (!entity.isBattleship) return;
             const dist = ownerPos.distanceTo(entity.group.getWorldPosition(new THREE.Vector3()));
             if (dist < bestDist) {
+                bestDist = dist;
+                best = entity;
+            }
+        });
+
+        if (best) return best;
+
+        enemies.forEach((entity) => {
+            const dist = ownerPos.distanceTo(entity.group.getWorldPosition(new THREE.Vector3()));
+            if (dist <= engageRadius && dist < bestDist) {
                 bestDist = dist;
                 best = entity;
             }
