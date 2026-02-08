@@ -23,6 +23,10 @@ import { SfxManager } from "./audio/SfxManager.js";
 const SETTINGS = GAME_CONFIG;
 
 const overlay = document.getElementById("overlay");
+const endScreen = document.getElementById("end-screen");
+const endResultEl = document.querySelector('[data-end="result"]');
+const endStatsEl = document.querySelector('[data-end="stats"]');
+const restartButton = document.getElementById("restart-button");
 const hud = document.getElementById("hud");
 const lockOnElement = document.getElementById("lockon");
 const reticleElement = document.getElementById("reticle");
@@ -65,7 +69,48 @@ renderer.domElement.addEventListener("click", () => {
 });
 
 document.addEventListener("pointerlockchange", () => {
+    if (endScreen?.classList.contains("visible")) {
+        overlay.style.display = "none";
+        return;
+    }
     overlay.style.display = document.pointerLockElement ? "none" : "grid";
+});
+
+const formatScore = (value) => String(value ?? 0).padStart(6, "0");
+
+const showEndScreen = () => {
+    if (!endScreen) return;
+    const resultLabel = gameState.result === "VICTORY" ? "VICTORY" : "DEFEAT";
+    if (endResultEl) endResultEl.textContent = resultLabel;
+    if (endStatsEl) {
+        const time = (gameState.elapsedTime ?? 0).toFixed(1);
+        const lines = [
+            `SCORE ${formatScore(gameState.score)}`,
+            `TIME ${time}s`,
+            `KILLS ${gameState.kills ?? 0}`,
+            `ALLY LOST ${gameState.allyDeaths ?? 0}`,
+        ];
+        endStatsEl.innerHTML = lines.map((line) => `<div>${line}</div>`).join("");
+    }
+    endScreen.classList.add("visible");
+    endScreen.setAttribute("aria-hidden", "false");
+    if (overlay) overlay.style.display = "none";
+    if (document.pointerLockElement) {
+        document.exitPointerLock();
+    }
+};
+
+if (restartButton) {
+    restartButton.addEventListener("click", () => {
+        window.location.reload();
+    });
+}
+
+window.addEventListener("keydown", (event) => {
+    if (!endScreen?.classList.contains("visible")) return;
+    if (event.key === "Enter" || event.key.toLowerCase() === "r") {
+        window.location.reload();
+    }
 });
 
 const light = new THREE.DirectionalLight(
@@ -482,6 +527,7 @@ const gameState = {
     respawnTimer: 0,
     isRespawning: false,
     result: null,
+    endShown: false,
     logs: [],
 };
 
@@ -1293,7 +1339,13 @@ const spawnSystem = {
 
 const gameStateSystem = {
     afterUpdate: ({ dt, world: currentWorld }) => {
-        if (gameState.result) return;
+        if (gameState.result) {
+            if (!gameState.endShown) {
+                gameState.endShown = true;
+                showEndScreen();
+            }
+            return;
+        }
 
         gameState.elapsedTime += dt;
         if (gameState.logs?.length) {
