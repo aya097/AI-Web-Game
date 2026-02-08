@@ -1,12 +1,14 @@
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
 export class HUD {
-    constructor(element, { player, movement, targeting, funnelWeapon = null, gameState = null }) {
+    constructor(element, { player, movement, targeting, funnelWeapon = null, bazookaWeapon = null, weaponState = null, gameState = null }) {
         this.element = element;
         this.player = player;
         this.movement = movement;
         this.targeting = targeting;
         this.funnelWeapon = funnelWeapon;
+        this.bazookaWeapon = bazookaWeapon;
+        this.weaponState = weaponState;
         this.gameState = gameState;
 
         if (this.element) {
@@ -15,6 +17,8 @@ export class HUD {
                     <div class="hud-brand">GUNFRAME</div>
                     <div class="hud-stat"><span class="label">SPD</span><span class="value" data-hud="speed">0.0</span></div>
                     <div class="hud-stat"><span class="label">FNL CD</span><span class="value" data-hud="funnel-cd">0.0</span></div>
+                    <div class="hud-stat"><span class="label">WPN</span><span class="value" data-hud="weapon-mode">BEAM</span></div>
+                    <div class="hud-stat"><span class="label">BZK</span><span class="value" data-hud="bazooka-status">READY 5</span></div>
                     <div class="hud-bar" data-hud="hp">
                         <span class="fill" data-hud="hp-fill"></span>
                         <span class="text" data-hud="hp-text">HP 0/0</span>
@@ -60,10 +64,13 @@ export class HUD {
                         <span class="text" data-hud="funnel-cd-text">READY</span>
                     </div>
                 </div>
+                <div class="hud-log" data-hud="log"></div>
             `;
 
             this.speedEl = this.element.querySelector('[data-hud="speed"]');
             this.funnelCdEl = this.element.querySelector('[data-hud="funnel-cd"]');
+            this.weaponModeEl = this.element.querySelector('[data-hud="weapon-mode"]');
+            this.bazookaStatusEl = this.element.querySelector('[data-hud="bazooka-status"]');
             this.hpFillEl = this.element.querySelector('[data-hud="hp-fill"]');
             this.hpTextEl = this.element.querySelector('[data-hud="hp-text"]');
             this.shieldFillEl = this.element.querySelector('[data-hud="shield-fill"]');
@@ -85,6 +92,7 @@ export class HUD {
             this.lockShieldEl = this.element.querySelector('[data-hud="lock-shield"]');
             this.funnelCdFillEl = this.element.querySelector('[data-hud="funnel-cd-fill"]');
             this.funnelCdTextEl = this.element.querySelector('[data-hud="funnel-cd-text"]');
+            this.logEl = this.element.querySelector('[data-hud="log"]');
         }
     }
 
@@ -126,6 +134,20 @@ export class HUD {
         if (this.funnelCdEl) {
             const cooldown = this.funnelWeapon?._cooldown ?? 0;
             this.funnelCdEl.textContent = cooldown > 0 ? cooldown.toFixed(1) : "READY";
+        }
+
+        if (this.weaponModeEl) {
+            const mode = this.weaponState?.mode === "bazooka" ? "BAZOOKA" : "BEAM";
+            this.weaponModeEl.textContent = mode;
+        }
+        if (this.bazookaStatusEl) {
+            if (!this.bazookaWeapon) {
+                this.bazookaStatusEl.textContent = "--";
+            } else if (this.bazookaWeapon.reloadTimer > 0) {
+                this.bazookaStatusEl.textContent = `RELOAD ${this.bazookaWeapon.reloadTimer.toFixed(1)}`;
+            } else {
+                this.bazookaStatusEl.textContent = `READY ${this.bazookaWeapon.shotsRemaining ?? 0}`;
+            }
         }
 
         if (this.hpFillEl) {
@@ -180,6 +202,15 @@ export class HUD {
             const ratio = max > 0 ? Math.max(0, Math.min(1, cooldown / max)) : 0;
             if (this.funnelCdFillEl) this.funnelCdFillEl.style.height = `${(ratio * 100).toFixed(1)}%`;
             if (this.funnelCdTextEl) this.funnelCdTextEl.textContent = cooldown > 0 ? cooldown.toFixed(1) : "READY";
+        }
+
+        if (this.logEl && this.gameState?.logs) {
+            const lines = this.gameState.logs.slice(-5).map((entry) => {
+                if (typeof entry === "string") return `<div>${entry}</div>`;
+                const color = entry.color ? ` style=\"color:${entry.color}\"` : "";
+                return `<div${color}>${entry.message}</div>`;
+            }).join("");
+            this.logEl.innerHTML = lines;
         }
     }
 }

@@ -1,7 +1,7 @@
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
 export class Enemy {
-    constructor(movement, ai, { weapons = [], type = "grunt", stats = null, events = null } = {}) {
+    constructor(movement, ai, { weapons = [], type = "grunt", stats = null, events = null, team = "enemy", palette = null } = {}) {
         this.movement = movement;
         this.ai = ai;
         this.weapons = weapons;
@@ -9,7 +9,9 @@ export class Enemy {
         this.events = events;
         this.group = new THREE.Group();
         this.isTargetable = true;
-        this.isEnemy = true;
+        this.team = team;
+        this.isEnemy = team === "enemy";
+        this.isAlly = team === "ally";
         this.scoreValue = stats?.score ?? 100;
         this.colliderRadius = 1.4;
         this.fireForward = new THREE.Vector3(0, 0, -1);
@@ -17,10 +19,16 @@ export class Enemy {
         this.stunPhase = 0;
         this._baseQuat = new THREE.Quaternion();
 
-        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xff3b3b, metalness: 0.6, roughness: 0.28 });
-        const coreMaterial = new THREE.MeshStandardMaterial({ color: 0x3a0c0c, metalness: 0.5, roughness: 0.4 });
-        const panelMaterial = new THREE.MeshStandardMaterial({ color: 0xff7a7a, metalness: 0.5, roughness: 0.32 });
-        const glowMaterial = new THREE.MeshStandardMaterial({ color: 0xff5a5a, emissive: 0xff2a2a, emissiveIntensity: 1.6 });
+        const resolvedPalette = palette ?? stats?.palette ?? {};
+        const bodyColor = resolvedPalette.body ?? (this.isEnemy ? 0xff3b3b : 0x5ab0ff);
+        const coreColor = resolvedPalette.core ?? (this.isEnemy ? 0x3a0c0c : 0x0b2a52);
+        const panelColor = resolvedPalette.panel ?? (this.isEnemy ? 0xff7a7a : 0x8fd4ff);
+        const glowColor = resolvedPalette.glow ?? (this.isEnemy ? 0xff5a5a : 0x7ad7ff);
+
+        const bodyMaterial = new THREE.MeshStandardMaterial({ color: bodyColor, metalness: 0.6, roughness: 0.28 });
+        const coreMaterial = new THREE.MeshStandardMaterial({ color: coreColor, metalness: 0.5, roughness: 0.4 });
+        const panelMaterial = new THREE.MeshStandardMaterial({ color: panelColor, metalness: 0.5, roughness: 0.32 });
+        const glowMaterial = new THREE.MeshStandardMaterial({ color: glowColor, emissive: glowColor, emissiveIntensity: 1.6 });
 
         const torso = new THREE.Mesh(new THREE.SphereGeometry(0.85, 22, 18), bodyMaterial);
         torso.scale.set(1.15, 1.35, 0.95);
@@ -149,9 +157,11 @@ export class Enemy {
         this.thrusterFlares = [thrusterFlareLeft, thrusterFlareRight];
         this.thrusterFlareMaterial = thrusterFlareMaterial;
 
+        const markerColor = this.isEnemy ? 0xff6b6b : 0x6bb8ff;
+        const markerEmissive = this.isEnemy ? 0xff3b3b : 0x2a6bff;
         const markerMaterial = new THREE.MeshStandardMaterial({
-            color: 0xff6b6b,
-            emissive: 0xff3b3b,
+            color: markerColor,
+            emissive: markerEmissive,
             emissiveIntensity: 1.6,
             transparent: true,
             opacity: 0.85,
@@ -170,8 +180,9 @@ export class Enemy {
         this.shield = this.maxShield;
     }
 
-    onDamage(amount) {
+    onDamage(amount, { source = null } = {}) {
         if (this.hp <= 0) return;
+        this._lastDamageSource = source;
         const before = this.hp + this.shield;
         let remaining = amount;
         if (this.shield > 0) {
@@ -184,7 +195,11 @@ export class Enemy {
         }
         const after = this.hp + this.shield;
         if (this.events && after < before) {
-            this.events.emit("enemyHit", { enemy: this });
+            if (this.isEnemy) {
+                this.events.emit("enemyHit", { enemy: this });
+            } else if (this.isAlly) {
+                this.events.emit("allyHit", { ally: this });
+            }
         }
         if (this.hp === 0) {
             this.weapons.forEach((weapon) => {
@@ -197,7 +212,11 @@ export class Enemy {
             });
             this.group.visible = false;
             if (this.events) {
-                this.events.emit("enemyKilled", { enemy: this });
+                if (this.isEnemy) {
+                    this.events.emit("enemyKilled", { enemy: this });
+                } else if (this.isAlly) {
+                    this.events.emit("allyKilled", { ally: this });
+                }
             }
         }
     }

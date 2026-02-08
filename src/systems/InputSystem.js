@@ -5,6 +5,7 @@ export class InputSystem {
         this.mouseDelta = { x: 0, y: 0 };
         this.pointerLocked = false;
         this.mouseDown = false;
+        this._prevMouseDown = false;
 
         this._onKeyDown = (event) => {
             this.keys.add(event.code);
@@ -58,17 +59,25 @@ export class InputSystem {
         const roll = (this.keys.has("KeyE") ? 1 : 0) + (this.keys.has("KeyQ") ? -1 : 0);
         const boost = this.keys.has("KeyV");
         const fire = this.mouseDown;
+        const firePressed = this.mouseDown && !this._prevMouseDown;
+        const fireReleased = !this.mouseDown && this._prevMouseDown;
         const lockOn = this.keys.has("KeyR");
         const funnel = this.keys.has("KeyF");
+        const switchWeapon = this.keys.has("KeyB");
         const mouseDelta = this.consumeMouseDelta();
+
+        this._prevMouseDown = this.mouseDown;
 
         return {
             move: { forward, right, up },
             roll,
             boost,
             fire,
+            firePressed,
+            fireReleased,
             lockOn,
             funnel,
+            switchWeapon,
             mouseDelta,
         };
     }

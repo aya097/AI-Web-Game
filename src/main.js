@@ -3,6 +3,7 @@ import { InputSystem } from "./systems/InputSystem.js";
 import { SixDoFMovement } from "./movement/SixDoFMovement.js";
 import { Player } from "./entities/Player.js";
 import { Enemy } from "./entities/Enemy.js";
+import { Battleship } from "./entities/Battleship.js";
 import { Game } from "./core/Game.js";
 import { World } from "./core/World.js";
 import { EntityManager } from "./core/EntityManager.js";
@@ -12,7 +13,9 @@ import { CollisionSystem } from "./systems/CollisionSystem.js";
 import { TargetingSystem } from "./systems/TargetingSystem.js";
 import { FunnelWeapon } from "./weapons/FunnelWeapon.js";
 import { LaserWeapon } from "./weapons/LaserWeapon.js";
+import { BazookaWeapon } from "./weapons/BazookaWeapon.js";
 import { EnemyAI } from "./ai/EnemyAI.js";
+import { AllyAI } from "./ai/AllyAI.js";
 import { GAME_CONFIG } from "./config/gameConfig.js";
 import { createVfxManager } from "./vfx/ExplosionVFX.js";
 import { SfxManager } from "./audio/SfxManager.js";
@@ -72,18 +75,6 @@ const light = new THREE.DirectionalLight(
 light.position.set(...SETTINGS.visuals.light.directional.position);
 scene.add(light);
 scene.add(new THREE.AmbientLight(SETTINGS.visuals.light.ambient.color));
-
-const grid = new THREE.GridHelper(
-    SETTINGS.visuals.grid.size,
-    SETTINGS.visuals.grid.divisions,
-    SETTINGS.visuals.grid.color1,
-    SETTINGS.visuals.grid.color2
-);
-grid.rotation.x = Math.PI / 2;
-scene.add(grid);
-
-const axisHelper = new THREE.AxesHelper(6);
-scene.add(axisHelper);
 
 const { spawnHitEffect, spawnExplosionEffect, system: vfxSystem } = createVfxManager(scene);
 
@@ -152,7 +143,7 @@ function createObstacleMesh(radius) {
     return { mesh, colliderRadius: colliderRadius * Math.max(mesh.scale.x, mesh.scale.y, mesh.scale.z) };
 }
 
-function createDecoy(position) {
+function createDecoy(position, { respawnDelay = 6.0 } = {}) {
     const group = new THREE.Group();
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(2, 24, 24), decoyMaterial);
     group.add(mesh);
@@ -339,7 +330,7 @@ function createDecoy(position) {
         _debrisTimer: 0,
         _deathDelay: 0,
         _respawnTimer: 0,
-        respawnDelay: 6.0,
+        respawnDelay,
         onHit() {
             this._hitTimer = 2.0;
             mesh.material = decoyHitMaterial;
@@ -451,6 +442,8 @@ const playerMovement = new SixDoFMovement({
     acceleration: SETTINGS.player.acceleration,
 });
 const player = new Player(playerMovement);
+player.team = "ally";
+player.isAlly = true;
 player.maxBoostFuel = SETTINGS.player.boostFuel ?? player.maxBoostFuel;
 player.boostFuel = player.maxBoostFuel;
 player.boostRegenDelay = SETTINGS.player.boostRegenDelay ?? player.boostRegenDelay;
@@ -483,11 +476,21 @@ const gameState = {
     lives: SETTINGS.gameplay.lives,
     elapsedTime: 0,
     kills: 0,
+    allyDeaths: 0,
     comboCount: 0,
     lastKillTime: -Infinity,
     respawnTimer: 0,
     isRespawning: false,
     result: null,
+    logs: [],
+};
+
+const addLog = (message, color = null) => {
+    if (!message) return;
+    gameState.logs.push({ message, color, time: gameState.elapsedTime ?? 0 });
+    if (gameState.logs.length > 6) {
+        gameState.logs.splice(0, gameState.logs.length - 6);
+    }
 };
 
 const events = new EventBus();
@@ -525,7 +528,7 @@ const entityFactory = {
     create(type, data = {}) {
         if (type === "decoy") {
             const position = data.position || new THREE.Vector3();
-            const decoy = createDecoy(position);
+            const decoy = createDecoy(position, { respawnDelay: data.respawnDelay ?? SETTINGS.decoys.respawnDelay });
             if (decoy.group) scene.add(decoy.group);
             return decoy;
         }
@@ -533,10 +536,16 @@ const entityFactory = {
             const enemyType = data.enemyType || "grunt";
             const stats = SETTINGS.enemies.types[enemyType] ?? SETTINGS.enemies.types.grunt;
             const enemyMovement = new SixDoFMovement({ maxSpeed: 60, boostMultiplier: 1.2, acceleration: 28, damping: 0.99 });
-            const enemy = new Enemy(enemyMovement, null, { type: enemyType, stats, events });
+            const enemy = new Enemy(enemyMovement, null, { type: enemyType, stats, events, team: "enemy" });
             enemy.name = stats.name;
             if (data.position) enemy.group.position.copy(data.position);
-            const enemyAI = new EnemyAI({ owner: enemy, target: player, profile: stats.ai });
+            const enemyAI = new EnemyAI({
+                owner: enemy,
+                target: player,
+                world,
+                profile: stats.ai,
+                boundaryRadius: (SETTINGS.visuals.stars.radius ?? 900) * 0.85,
+            });
             enemy.ai = enemyAI;
             const enemyLaser = new LaserWeapon({
                 owner: enemy,
@@ -558,6 +567,57 @@ const entityFactory = {
             enemy.weapons.push(enemyLaser);
             if (enemy.group) scene.add(enemy.group);
             return enemy;
+        }
+        if (type === "ally") {
+            const allyType = data.allyType || "wing";
+            const stats = SETTINGS.allies.types[allyType] ?? SETTINGS.allies.types.wing;
+            const allyMovement = new SixDoFMovement({ maxSpeed: 70, boostMultiplier: 1.3, acceleration: 30, damping: 0.99 });
+            const ally = new Enemy(allyMovement, null, { type: allyType, stats, events, team: "ally", palette: stats.palette });
+            ally.name = stats.name;
+            ally.scoreValue = 0;
+            if (data.position) ally.group.position.copy(data.position);
+            const allyAI = new AllyAI({ owner: ally, world, profile: stats.ai, battleships: [...enemyBattleships, ...allyBattleships] });
+            ally.ai = allyAI;
+            const allyLaser = new LaserWeapon({
+                owner: ally,
+                world,
+                scene,
+                damage: SETTINGS.weapons.playerLaser.damage,
+                range: SETTINGS.weapons.playerLaser.range,
+                fireRate: stats.fireRate ?? SETTINGS.weapons.playerLaser.fireRate,
+                beamColor: SETTINGS.weapons.playerLaser.beamColor,
+                beamEmissive: SETTINGS.weapons.playerLaser.beamEmissive,
+                beamRadius: SETTINGS.weapons.playerLaser.beamRadius * 1.4,
+                beamDuration: SETTINGS.weapons.playerLaser.beamDuration,
+                getMuzzleWorldPosition: () =>
+                    ally.weaponMuzzle
+                        ? ally.weaponMuzzle.getWorldPosition(new THREE.Vector3())
+                        : ally.group.getWorldPosition(new THREE.Vector3()),
+                onFire: () => sfx.playLaser({ isEnemy: false }),
+            });
+            ally.weapons.push(allyLaser);
+            if (ally.group) scene.add(ally.group);
+            return ally;
+        }
+        if (type === "battleship") {
+            const team = data.team ?? "enemy";
+            const isEnemyTeam = team === "enemy";
+            const ship = new Battleship({
+                team,
+                world,
+                scene,
+                events,
+                stats: SETTINGS.battleships.stats,
+                beam: {
+                    ...SETTINGS.battleships.beam,
+                    beamColor: isEnemyTeam ? SETTINGS.battleships.beam.beamColor : 0x7ad7ff,
+                    beamEmissive: isEnemyTeam ? SETTINGS.battleships.beam.beamEmissive : 0x2a6bff,
+                    onFire: () => sfx.playLaser({ isEnemy: isEnemyTeam }),
+                },
+            });
+            if (data.position) ship.group.position.copy(data.position);
+            ship.name = data.name ?? (team === "enemy" ? "Enemy Battleship" : "Allied Battleship");
+            return ship;
         }
         if (type === "asteroid") {
             const radius = data.radius ?? 12;
@@ -582,13 +642,98 @@ const entityFactory = {
 
 const entityManager = new EntityManager(world, entityFactory);
 
-const decoys = [
-    new THREE.Vector3(0, 0, 120),
-    new THREE.Vector3(30, 10, 180),
-    new THREE.Vector3(-40, -5, 160),
-].map((position) => entityManager.spawn("decoy", { position }));
+const enemyBattleships = SETTINGS.battleships.positions.enemy.map((pos, index) =>
+    entityManager.spawn("battleship", {
+        team: "enemy",
+        name: `Enemy Battleship ${index + 1}`,
+        position: new THREE.Vector3(pos[0], pos[1], pos[2]),
+    })
+);
+
+const allyBattleships = SETTINGS.battleships.positions.ally.map((pos, index) =>
+    entityManager.spawn("battleship", {
+        team: "ally",
+        name: `Allied Battleship ${index + 1}`,
+        position: new THREE.Vector3(pos[0], pos[1], pos[2]),
+    })
+);
+
+if (allyBattleships[0]?.group) {
+    const spawnOffset = new THREE.Vector3(0, 16, 16);
+    player.group.position.copy(allyBattleships[0].group.getWorldPosition(new THREE.Vector3())).add(spawnOffset);
+}
+
+const shipBars = {
+    enemy: ["enemy-1", "enemy-2"],
+    ally: ["ally-1", "ally-2"],
+};
+
+const shipBarElements = {
+    enemy: [],
+    ally: [],
+    ready: false,
+};
+
+const initShipBars = () => {
+    if (shipBarElements.ready) return;
+    shipBarElements.enemy = shipBars.enemy.map((key) => document.querySelector(`[data-ship="${key}"]`));
+    shipBarElements.ally = shipBars.ally.map((key) => document.querySelector(`[data-ship="${key}"]`));
+    shipBarElements.ready = true;
+};
+
+const updateShipBars = () => {
+    if (!shipBarElements.ready) initShipBars();
+    const updateGroup = (keys, ships, labelPrefix) => {
+        keys.forEach((key, index) => {
+            const bar = key;
+            if (!bar) return;
+            const fill = bar.querySelector(".fill");
+            const label = bar.querySelector(".label");
+            const ship = ships[index];
+            if (!ship) {
+                if (fill) fill.style.width = "0%";
+                if (label) label.textContent = `${labelPrefix} ${index + 1} --/--`;
+                return;
+            }
+            const hp = Math.max(0, ship.hp ?? 0);
+            const maxHp = ship.maxHp ?? hp;
+            const ratio = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+            if (fill) fill.style.width = `${(ratio * 100).toFixed(1)}%`;
+            if (label) label.textContent = `${labelPrefix} ${index + 1} ${hp.toFixed(0)}/${maxHp}`;
+        });
+    };
+    updateGroup(shipBarElements.enemy, enemyBattleships, "ENEMY");
+    updateGroup(shipBarElements.ally, allyBattleships, "ALLY");
+};
 
 const randomInRange = (min, max) => min + Math.random() * (max - min);
+const getActiveEnemyTargets = () =>
+    world
+        .query()
+        .filter((entity) => entity?.group && entity.team === "enemy" && (typeof entity.hp !== "number" || entity.hp > 0));
+
+const findNearestTarget = (originEntity, candidates) => {
+    if (!originEntity?.group) return null;
+    const origin = originEntity.group.getWorldPosition(new THREE.Vector3());
+    let best = null;
+    let bestDist = Infinity;
+    candidates.forEach((entity) => {
+        const dist = origin.distanceTo(entity.group.getWorldPosition(new THREE.Vector3()));
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = entity;
+        }
+    });
+    return best;
+};
+
+enemyBattleships.forEach((ship) => {
+    ship.setTargetResolver(() => player);
+});
+
+allyBattleships.forEach((ship) => {
+    ship.setTargetResolver(() => findNearestTarget(ship, getActiveEnemyTargets()));
+});
 const spawnObstacleField = () => {
     const [minRadius, maxRadius] = SETTINGS.obstacles.radiusRange;
     const [minDist, maxDist] = SETTINGS.obstacles.distanceRange;
@@ -621,11 +766,9 @@ const funnelWeapon = new FunnelWeapon({
     world,
     scene,
     targeting: targetingSystem,
-    count: 3,
+    count: 5,
 });
 player.addWeapon(funnelWeapon);
-
-const hudView = new HUD(hud, { player, movement: playerMovement, targeting: targetingSystem, funnelWeapon, gameState });
 
 const playerMuzzleOffset = new THREE.Vector3(0.0, 0.25, 0.35);
 const playerReticleOffset = new THREE.Vector3(0.0, 0.55, 0.35);
@@ -673,13 +816,76 @@ const playerLaser = new LaserWeapon({
         const rayDistance = SETTINGS.weapons.playerLaser.range ?? 500;
         playerReticleRayPoint.copy(camera.position).addScaledVector(cameraRayDir, rayDistance);
         const muzzleWorld = getPlayerMuzzleWorld();
-        return playerAimDirection.copy(playerReticleRayPoint).sub(muzzleWorld).normalize();
+        const baseDir = playerAimDirection.copy(playerReticleRayPoint).sub(muzzleWorld).normalize();
+        const lockTarget = targetingSystem.getCurrentTarget();
+        if (lockTarget?.group) {
+            const lockDir = lockTarget.group.getWorldPosition(new THREE.Vector3()).sub(muzzleWorld).normalize();
+            return baseDir.lerp(lockDir, 0.35).normalize();
+        }
+        return baseDir;
     },
-    inputKey: "fire",
+    inputKey: "firePressed",
     recoilKick: 0.35,
     onFire: () => sfx.playLaser({ isEnemy: false }),
 });
 player.addWeapon(playerLaser);
+
+const playerBazooka = new BazookaWeapon({
+    owner: player,
+    world,
+    scene,
+    damage: SETTINGS.weapons.bazooka.damage,
+    range: SETTINGS.weapons.bazooka.range,
+    fireRate: SETTINGS.weapons.bazooka.fireRate,
+    clipSize: SETTINGS.weapons.bazooka.clipSize,
+    cooldownDuration: SETTINGS.weapons.bazooka.cooldownDuration,
+    beamColor: SETTINGS.weapons.bazooka.beamColor,
+    beamEmissive: SETTINGS.weapons.bazooka.beamEmissive,
+    beamRadius: SETTINGS.weapons.bazooka.beamRadius,
+    beamDuration: SETTINGS.weapons.bazooka.beamDuration,
+    getMuzzleWorldPosition: () => {
+        return getPlayerMuzzleWorld();
+    },
+    getAimDirection: () => {
+        const reticleWorld = getPlayerReticleWorld();
+        const cameraRayDir = reticleWorld.clone().sub(camera.position).normalize();
+        const rayDistance = SETTINGS.weapons.bazooka.range ?? 500;
+        playerReticleRayPoint.copy(camera.position).addScaledVector(cameraRayDir, rayDistance);
+        const muzzleWorld = getPlayerMuzzleWorld();
+        const baseDir = playerAimDirection.copy(playerReticleRayPoint).sub(muzzleWorld).normalize();
+        const lockTarget = targetingSystem.getCurrentTarget();
+        if (lockTarget?.group) {
+            const lockDir = lockTarget.group.getWorldPosition(new THREE.Vector3()).sub(muzzleWorld).normalize();
+            return baseDir.lerp(lockDir, 0.35).normalize();
+        }
+        return baseDir;
+    },
+    inputKey: "firePressed",
+    recoilKick: 0.6,
+    onFire: ({ hitPoint }) => {
+        if (hitPoint) {
+            spawnExplosionEffect(hitPoint, 0xffb36b);
+        }
+        sfx.playExplosion();
+    },
+});
+player.addWeapon(playerBazooka);
+
+const weaponState = {
+    mode: "laser",
+};
+playerLaser.enabled = true;
+playerBazooka.enabled = false;
+
+const hudView = new HUD(hud, {
+    player,
+    movement: playerMovement,
+    targeting: targetingSystem,
+    funnelWeapon,
+    bazookaWeapon: playerBazooka,
+    weaponState,
+    gameState,
+});
 
 const playerInputSystem = {
     beforeUpdate: ({ input: inputState }) => {
@@ -699,6 +905,25 @@ const playerInputSystem = {
     },
 };
 
+let lastSwitchInput = false;
+const weaponSwitchSystem = {
+    update: ({ input: inputState }) => {
+        if (weaponState.mode === "bazooka" && playerBazooka.reloadTimer > 0) {
+            weaponState.mode = "laser";
+            playerLaser.enabled = true;
+            playerBazooka.enabled = false;
+        }
+        const pressed = inputState.switchWeapon;
+        const justPressed = pressed && !lastSwitchInput;
+        lastSwitchInput = pressed;
+        if (!justPressed) return;
+
+        weaponState.mode = weaponState.mode === "laser" ? "bazooka" : "laser";
+        playerLaser.enabled = weaponState.mode === "laser";
+        playerBazooka.enabled = weaponState.mode === "bazooka";
+    },
+};
+
 let lastLockInput = false;
 const lockOnSystem = {
     update: ({ input: inputState, world: currentWorld }) => {
@@ -713,14 +938,11 @@ const lockOnSystem = {
             return;
         }
 
-        const candidates = currentWorld.query().filter((entity) => entity?.isTargetable);
+        const candidates = currentWorld
+            .query()
+            .filter((entity) => entity?.isTargetable && entity.team !== "ally");
         targetingSystem.acquireTarget(candidates);
     },
-};
-
-const spawnState = {
-    timer: 0,
-    nextInterval: SETTINGS.enemies.spawn.baseInterval,
 };
 
 const chooseEnemyType = () => {
@@ -730,17 +952,20 @@ const chooseEnemyType = () => {
     return "grunt";
 };
 
-const spawnEnemy = () => {
-    const [minR, maxR] = SETTINGS.enemies.spawn.radiusRange;
-    const [minY, maxY] = SETTINGS.enemies.spawn.heightRange;
-    const radius = randomInRange(minR, maxR);
-    const angle = Math.random() * Math.PI * 2;
-    const position = player.group.position
-        .clone()
-        .add(new THREE.Vector3(Math.cos(angle) * radius, randomInRange(minY, maxY), Math.sin(angle) * radius));
-    const enemyType = chooseEnemyType();
-    entityManager.spawn("enemy", { position, enemyType });
+const chooseAllyType = () => "wing";
+
+const battleshipSpawnState = new Map();
+
+const initBattleshipSpawnState = (ship) => {
+    battleshipSpawnState.set(ship, {
+        enemyTimer: randomInRange(1.5, SETTINGS.battleships.spawn.enemyInterval),
+        decoyTimer: randomInRange(2.5, SETTINGS.battleships.spawn.decoyInterval),
+        allyTimer: randomInRange(1.5, SETTINGS.battleships.spawn.allyInterval),
+    });
 };
+
+enemyBattleships.forEach(initBattleshipSpawnState);
+allyBattleships.forEach(initBattleshipSpawnState);
 
 events.on("enemyKilled", ({ enemy }) => {
     const now = gameState.elapsedTime;
@@ -758,6 +983,12 @@ events.on("enemyKilled", ({ enemy }) => {
     }
     sfx.playExplosion();
 
+    if (enemy?.isBattleship) return;
+    addLog("ENEMY DOWN", "rgba(255, 120, 120, 0.95)");
+    if (enemy?._lastDamageSource === player) {
+        addLog("PLAYER KILL", "rgba(200, 245, 255, 0.95)");
+    }
+
     if (enemy?.group) {
         const epicenter = enemy.group.getWorldPosition(new THREE.Vector3());
         const nearby = world.queryNearby ? world.queryNearby(epicenter, 55) : world.query();
@@ -773,6 +1004,41 @@ events.on("enemyHit", ({ enemy }) => {
     if (!enemy?.group) return;
     spawnHitEffect(enemy.group.getWorldPosition(new THREE.Vector3()), 0xff6b6b);
     sfx.playHit();
+});
+
+events.on("allyHit", ({ ally }) => {
+    if (!ally?.group) return;
+    spawnHitEffect(ally.group.getWorldPosition(new THREE.Vector3()), 0x7ad7ff);
+    sfx.playHit();
+});
+
+events.on("allyKilled", ({ ally }) => {
+    gameState.allyDeaths += 1;
+    if (ally?.group) {
+        spawnExplosionEffect(ally.group.getWorldPosition(new THREE.Vector3()), 0x7ad7ff);
+    }
+    sfx.playExplosion();
+    if (ally?.isBattleship) return;
+    addLog("ALLY DOWN", "rgba(120, 210, 255, 0.95)");
+});
+
+events.on("battleshipHit", ({ ship }) => {
+    if (!ship?.group) return;
+    const color = ship.team === "enemy" ? 0xff7a7a : 0x7ad7ff;
+    spawnHitEffect(ship.group.getWorldPosition(new THREE.Vector3()), color);
+    sfx.playHit();
+});
+
+events.on("battleshipDestroyed", ({ ship }) => {
+    if (!ship?.group) return;
+    const color = ship.team === "enemy" ? 0xff7a7a : 0x7ad7ff;
+    spawnExplosionEffect(ship.group.getWorldPosition(new THREE.Vector3()), color);
+    sfx.playExplosion();
+    if (ship.team === "enemy") {
+        addLog("ENEMY SHIP DOWN", "rgba(255, 120, 120, 0.95)");
+    } else {
+        addLog("ALLY SHIP DOWN", "rgba(120, 210, 255, 0.95)");
+    }
 });
 
 const collisionSystem = new CollisionSystem();
@@ -920,19 +1186,25 @@ const minimapSystem = {
 
         world.query().forEach((entity) => {
             if (!entity?.group || entity === player) return;
-            if (!entity.isEnemy && !entity.isDecoy) return;
+            const isEnemy = entity.team === "enemy" || entity.isEnemy;
+            const isAlly = entity.team === "ally" || entity.isAlly;
+            const isDecoy = entity.isDecoy;
+            if (!isEnemy && !isAlly && !isDecoy) return;
             if (entity.hp !== undefined && entity.hp <= 0) return;
             const p = project(entity.group.getWorldPosition(new THREE.Vector3()));
             ctx.beginPath();
-            ctx.fillStyle = entity.isEnemy ? "rgba(255, 120, 120, 0.9)" : "rgba(255, 210, 120, 0.9)";
-            ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2);
+            if (isEnemy) ctx.fillStyle = "rgba(255, 120, 120, 0.9)";
+            else if (isAlly) ctx.fillStyle = "rgba(120, 210, 255, 0.9)";
+            else ctx.fillStyle = "rgba(255, 210, 120, 0.9)";
+            const size = entity.isBattleship ? 4.8 : 3.2;
+            ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
             ctx.fill();
 
             if (lockTarget && entity === lockTarget) {
                 ctx.strokeStyle = "rgba(180, 240, 255, 0.9)";
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2);
                 ctx.stroke();
             }
         });
@@ -956,22 +1228,66 @@ const minimapSystem = {
 const spawnSystem = {
     afterUpdate: ({ dt, world: currentWorld }) => {
         if (gameState.result) return;
+
         const activeEnemies = currentWorld
             .query()
-            .filter((entity) => entity?.isEnemy && entity.hp > 0).length;
+            .filter((entity) => entity?.team === "enemy" && !entity.isBattleship && entity.hp > 0).length;
+        const activeAllies = currentWorld
+            .query()
+            .filter((entity) => entity?.team === "ally" && !entity.isBattleship && entity.hp > 0).length;
+        const activeDecoys = currentWorld
+            .query()
+            .filter((entity) => entity?.isDecoy && entity.hp > 0).length;
 
-        if (activeEnemies >= SETTINGS.enemies.spawn.maxActive) return;
+        enemyBattleships.forEach((ship) => {
+            if (!ship || ship.hp <= 0) return;
+            const state = battleshipSpawnState.get(ship);
+            if (!state) return;
 
-        spawnState.timer -= dt;
-        if (spawnState.timer > 0) return;
+            state.enemyTimer -= dt;
+            if (state.enemyTimer <= 0 && activeEnemies < SETTINGS.battleships.spawn.maxEnemyActive) {
+                const enemyType = chooseEnemyType();
+                const launch = ship.getLaunchWorldPosition();
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.group.quaternion).normalize();
+                const position = launch.clone().add(forward.clone().multiplyScalar(18)).add(
+                    new THREE.Vector3(randomInRange(-6, 6), randomInRange(-4, 4), randomInRange(-6, 6))
+                );
+                const enemy = entityManager.spawn("enemy", { position, enemyType });
+                const targetShip = allyBattleships.find((allyShip) => allyShip?.group && allyShip.hp > 0) || allyBattleships[0];
+                if (enemy?.group && targetShip?.group) {
+                    const targetPos = targetShip.group.getWorldPosition(new THREE.Vector3());
+                    enemy.group.lookAt(targetPos);
+                }
+                state.enemyTimer = SETTINGS.battleships.spawn.enemyInterval;
+            }
 
-        spawnEnemy();
+            state.decoyTimer -= dt;
+            if (state.decoyTimer <= 0 && activeDecoys < SETTINGS.battleships.spawn.maxDecoyActive) {
+                const launch = ship.getLaunchWorldPosition();
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.group.quaternion).normalize();
+                const position = launch.clone().add(forward.clone().multiplyScalar(16)).add(
+                    new THREE.Vector3(randomInRange(-8, 8), randomInRange(-6, 6), randomInRange(-6, 6))
+                );
+                entityManager.spawn("decoy", { position, respawnDelay: SETTINGS.decoys.respawnDelay });
+                state.decoyTimer = SETTINGS.battleships.spawn.decoyInterval;
+            }
+        });
 
-        const progress = Math.min(1, gameState.elapsedTime / SETTINGS.gameplay.timeLimit);
-        const interval = SETTINGS.enemies.spawn.baseInterval -
-            progress * (SETTINGS.enemies.spawn.baseInterval - SETTINGS.enemies.spawn.minInterval);
-        spawnState.nextInterval = Math.max(SETTINGS.enemies.spawn.minInterval, interval);
-        spawnState.timer = spawnState.nextInterval;
+        allyBattleships.forEach((ship) => {
+            if (!ship || ship.hp <= 0) return;
+            const state = battleshipSpawnState.get(ship);
+            if (!state) return;
+
+            state.allyTimer -= dt;
+            if (state.allyTimer <= 0 && activeAllies < SETTINGS.battleships.spawn.maxAllyActive) {
+                const allyType = chooseAllyType();
+                const position = ship.getLaunchWorldPosition().add(
+                    new THREE.Vector3(randomInRange(-6, 6), randomInRange(-4, 4), randomInRange(-8, 8))
+                );
+                entityManager.spawn("ally", { position, allyType });
+                state.allyTimer = SETTINGS.battleships.spawn.allyInterval;
+            }
+        });
     },
 };
 
@@ -980,6 +1296,30 @@ const gameStateSystem = {
         if (gameState.result) return;
 
         gameState.elapsedTime += dt;
+        if (gameState.logs?.length) {
+            const now = gameState.elapsedTime;
+            gameState.logs = gameState.logs.filter((entry) => now - (entry.time ?? 0) < 3.5);
+        }
+
+        updateShipBars();
+
+        const boundsRadius = SETTINGS.visuals.stars.radius ?? 900;
+        const boundsRadiusSq = boundsRadius * boundsRadius;
+        currentWorld.query().forEach((entity) => {
+            if (!entity?.group) return;
+            const pos = entity.group.getWorldPosition(new THREE.Vector3());
+            if (pos.lengthSq() <= boundsRadiusSq) return;
+            if (entity === player) {
+                player.onDamage(9999);
+                return;
+            }
+            if (typeof entity.onDamage === "function" && typeof entity.hp === "number") {
+                entity.onDamage(9999);
+            } else if (entity.group) {
+                entity.group.visible = false;
+                if (currentWorld?.remove) currentWorld.remove(entity);
+            }
+        });
 
         if (gameState.isRespawning) {
             gameState.respawnTimer = Math.max(0, gameState.respawnTimer - dt);
@@ -994,7 +1334,12 @@ const gameStateSystem = {
                     }
                 });
                 player.group.visible = true;
-                player.group.position.set(0, 0, 0);
+                if (allyBattleships[0]?.group) {
+                    const spawnOffset = new THREE.Vector3(0, 16, 16);
+                    player.group.position.copy(allyBattleships[0].group.getWorldPosition(new THREE.Vector3())).add(spawnOffset);
+                } else {
+                    player.group.position.set(0, 0, 0);
+                }
                 player.rotation.set(0, 0, 0);
                 player.group.quaternion.setFromEuler(player.rotation);
                 playerMovement.velocity.set(0, 0, 0);
@@ -1014,12 +1359,15 @@ const gameStateSystem = {
             return;
         }
 
-        if (gameState.elapsedTime >= SETTINGS.gameplay.timeLimit || gameState.kills >= SETTINGS.gameplay.killTarget) {
-            gameState.result = "VICTORY";
+        const enemyShipsAlive = enemyBattleships.filter((ship) => ship?.hp > 0).length;
+        const allyShipsAlive = allyBattleships.filter((ship) => ship?.hp > 0).length;
+
+        if (allyShipsAlive === 0) {
+            gameState.result = "DEFEAT";
+            return;
         }
 
-        const enemies = currentWorld.query().filter((entity) => entity?.isEnemy);
-        if (enemies.length > 0 && enemies.every((enemyEntity) => enemyEntity.hp <= 0)) {
+        if (enemyShipsAlive === 0) {
             gameState.result = "VICTORY";
         }
     },
@@ -1032,7 +1380,7 @@ const game = new Game({
     input,
     world,
     hud: hudView,
-    systems: [playerInputSystem, lockOnSystem, collisionSystem, cameraFollowSystem, lockOnUiSystem, minimapSystem, spawnSystem, vfxSystem, gameStateSystem],
+    systems: [playerInputSystem, weaponSwitchSystem, lockOnSystem, collisionSystem, cameraFollowSystem, lockOnUiSystem, minimapSystem, spawnSystem, vfxSystem, gameStateSystem],
 });
 
 function animate(time) {

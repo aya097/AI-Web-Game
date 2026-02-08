@@ -331,12 +331,15 @@ export class Player {
         this.movement.integrate(this.group, processedInput, dt);
 
         this.weapons.forEach((weapon) => {
-            if (weapon?.inputKey) {
+            const isEnabled = weapon?.enabled !== false;
+            if (weapon?.inputKey && isEnabled) {
                 if (processedInput[weapon.inputKey]) {
                     if (typeof weapon.triggerStart === "function") weapon.triggerStart();
                 } else if (typeof weapon.triggerEnd === "function") {
                     weapon.triggerEnd();
                 }
+            } else if (weapon?.inputKey && !isEnabled && typeof weapon.triggerEnd === "function") {
+                weapon.triggerEnd();
             }
             if (typeof weapon.update === "function") {
                 weapon.update(dt, processedInput);

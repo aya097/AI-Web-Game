@@ -37,6 +37,57 @@
             border-radius: 8px;
         }
 
+        #ship-bars {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            width: 240px;
+            padding: 10px 12px;
+            border: 1px solid rgba(120, 220, 255, 0.25);
+            border-radius: 12px;
+            background: rgba(6, 14, 26, 0.6);
+            color: rgba(230, 245, 255, 0.9);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            pointer-events: none;
+        }
+
+        #ship-bars .title {
+            font-size: 10px;
+            margin-bottom: 8px;
+            color: rgba(200, 245, 255, 0.8);
+        }
+
+        .ship-bar {
+            position: relative;
+            height: 12px;
+            margin: 6px 0;
+            border-radius: 8px;
+            border: 1px solid rgba(120, 220, 255, 0.35);
+            background: rgba(8, 16, 30, 0.85);
+            overflow: hidden;
+        }
+
+        .ship-bar .fill {
+            position: absolute;
+            inset: 0;
+            width: 0;
+            background: linear-gradient(90deg, rgba(255, 120, 120, 0.9), rgba(255, 70, 70, 0.95));
+        }
+
+        .ship-bar.ally .fill {
+            background: linear-gradient(90deg, rgba(120, 210, 255, 0.9), rgba(60, 150, 255, 0.95));
+        }
+
+        .ship-bar .label {
+            position: relative;
+            z-index: 1;
+            font-size: 9px;
+            line-height: 12px;
+            padding-left: 8px;
+            color: rgba(240, 250, 255, 0.9);
+        }
+
         #hud {
             position: fixed;
             inset: 0;
@@ -322,6 +373,28 @@
             color: rgba(200, 245, 255, 0.9);
         }
 
+        .hud-log {
+            position: fixed;
+            left: 50%;
+            bottom: 20px;
+            transform: translateX(-50%);
+            min-width: 240px;
+            padding: 8px 14px;
+            border: 1px solid rgba(120, 220, 255, 0.25);
+            border-radius: 10px;
+            background: rgba(5, 12, 25, 0.55);
+            color: rgba(220, 245, 255, 0.9);
+            font-size: 11px;
+            text-align: center;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+
+        .hud-log div {
+            margin: 2px 0;
+        }
+
         #minimap {
             position: fixed;
             right: 20px;
@@ -430,7 +503,18 @@
 
 <body>
     <div id="overlay"><span>クリックでポインターロック開始<br />WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / V
-            ブースト<br />左クリック 射撃 / R ロックオン / F ファンネル<br />マウスで視点操作</span></div>
+            ブースト<br />左クリック 射撃 / B ビーム・バズーカ切替 / R ロックオン / F ファンネル<br />敵戦艦2隻破壊で勝利<br />マウスで視点操作</span></div>
+    <div id="ship-bars">
+        <div class="title">BATTLESHIPS</div>
+        <div class="ship-bar enemy" data-ship="enemy-1"><span class="fill"></span><span class="label">ENEMY 1
+                --/--</span></div>
+        <div class="ship-bar enemy" data-ship="enemy-2"><span class="fill"></span><span class="label">ENEMY 2
+                --/--</span></div>
+        <div class="ship-bar ally" data-ship="ally-1"><span class="fill"></span><span class="label">ALLY 1 --/--</span>
+        </div>
+        <div class="ship-bar ally" data-ship="ally-2"><span class="fill"></span><span class="label">ALLY 2 --/--</span>
+        </div>
+    </div>
     <div id="reticle"></div>
     <div id="hud"></div>
     <canvas id="minimap"></canvas>

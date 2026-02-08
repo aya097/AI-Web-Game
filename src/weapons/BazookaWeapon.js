@@ -1,22 +1,24 @@
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
-export class LaserWeapon {
+export class BazookaWeapon {
     constructor({
         owner = null,
         world = null,
         scene = null,
-        damage = 10,
-        range = 500,
-        fireRate = 4,
-        beamColor = 0xff9f9f,
-        beamEmissive = 0xff4f4f,
-        beamRadius = 0.06,
-        beamDuration = 0.12,
+        damage = 40,
+        range = 420,
+        fireRate = 1.2,
+        clipSize = 5,
+        cooldownDuration = 6.0,
+        beamColor = 0xffd18a,
+        beamEmissive = 0xff8f3a,
+        beamRadius = 0.14,
+        beamDuration = 0.16,
         muzzleOffset = null,
         getMuzzleWorldPosition = null,
         getAimDirection = null,
         inputKey = null,
-        recoilKick = 0.2,
+        recoilKick = 0.5,
         onFire = null,
     } = {}) {
         this.owner = owner;
@@ -25,6 +27,8 @@ export class LaserWeapon {
         this.damage = damage;
         this.range = range;
         this.fireRate = fireRate;
+        this.clipSize = clipSize;
+        this.cooldownDuration = cooldownDuration;
         this.beamColor = beamColor;
         this.beamEmissive = beamEmissive;
         this.beamRadius = beamRadius;
@@ -35,6 +39,8 @@ export class LaserWeapon {
         this.inputKey = inputKey;
         this.recoilKick = recoilKick;
         this.onFire = onFire;
+        this.enabled = true;
+
         this._cooldown = 0;
         this._isFiring = false;
         this._beamTimer = 0;
@@ -45,6 +51,9 @@ export class LaserWeapon {
         this._impactMesh = null;
         this._impactTimer = 0;
 
+        this.shotsRemaining = clipSize;
+        this.reloadTimer = 0;
+
         this._beamMesh = null;
         if (this.scene) {
             const beamGeometry = new THREE.CylinderGeometry(this.beamRadius, this.beamRadius, 1, 8, 1, true);
@@ -53,7 +62,7 @@ export class LaserWeapon {
                 emissive: this.beamEmissive,
                 emissiveIntensity: 2.0,
                 transparent: true,
-                opacity: 0.9,
+                opacity: 0.85,
                 depthWrite: false,
                 blending: THREE.AdditiveBlending,
             });
@@ -61,7 +70,7 @@ export class LaserWeapon {
             this._beamMesh.visible = false;
             this.scene.add(this._beamMesh);
 
-            const glowGeometry = new THREE.CylinderGeometry(this.beamRadius * 2.2, this.beamRadius * 2.2, 1, 10, 1, true);
+            const glowGeometry = new THREE.CylinderGeometry(this.beamRadius * 2.4, this.beamRadius * 2.4, 1, 10, 1, true);
             const glowMaterial = new THREE.MeshStandardMaterial({
                 color: this.beamColor,
                 emissive: this.beamEmissive,
@@ -75,11 +84,11 @@ export class LaserWeapon {
             this._glowMesh.visible = false;
             this.scene.add(this._glowMesh);
 
-            const flashGeometry = new THREE.SphereGeometry(0.18, 12, 12);
+            const flashGeometry = new THREE.SphereGeometry(0.28, 12, 12);
             const flashMaterial = new THREE.MeshStandardMaterial({
                 color: this.beamColor,
                 emissive: this.beamEmissive,
-                emissiveIntensity: 2.4,
+                emissiveIntensity: 2.6,
                 transparent: true,
                 opacity: 0,
                 depthWrite: false,
@@ -89,11 +98,11 @@ export class LaserWeapon {
             this._flashMesh.visible = false;
             this.scene.add(this._flashMesh);
 
-            const impactGeometry = new THREE.RingGeometry(0.15, 0.35, 24);
+            const impactGeometry = new THREE.RingGeometry(0.25, 0.7, 24);
             const impactMaterial = new THREE.MeshStandardMaterial({
                 color: this.beamColor,
                 emissive: this.beamEmissive,
-                emissiveIntensity: 2.2,
+                emissiveIntensity: 2.4,
                 transparent: true,
                 opacity: 0,
                 side: THREE.DoubleSide,
@@ -128,10 +137,10 @@ export class LaserWeapon {
         if (this._beamTimer > 0 && this._beamMesh) {
             this._beamTimer = Math.max(0, this._beamTimer - dt);
             const t = this._beamTimer / Math.max(0.001, this.beamDuration);
-            const pulse = 1 + (1 - t) * 0.5;
+            const pulse = 1 + (1 - t) * 0.6;
             this._beamMesh.scale.set(pulse, this._beamLength, pulse);
             if (this._beamMesh.material) {
-                this._beamMesh.material.opacity = 0.9 * t;
+                this._beamMesh.material.opacity = 0.85 * t;
             }
             if (this._glowMesh) {
                 this._glowMesh.scale.set(pulse * 1.4, this._beamLength, pulse * 1.4);
@@ -148,10 +157,10 @@ export class LaserWeapon {
 
         if (this._flashTimer > 0 && this._flashMesh) {
             this._flashTimer = Math.max(0, this._flashTimer - dt);
-            const t = this._flashTimer / 0.08;
+            const t = this._flashTimer / 0.1;
             this._flashMesh.visible = true;
-            this._flashMesh.scale.setScalar(0.8 + (1 - t) * 1.2);
-            this._flashMesh.material.opacity = 0.9 * t;
+            this._flashMesh.scale.setScalar(0.9 + (1 - t) * 1.6);
+            this._flashMesh.material.opacity = 0.95 * t;
             if (this._flashTimer === 0) {
                 this._flashMesh.visible = false;
             }
@@ -159,13 +168,20 @@ export class LaserWeapon {
 
         if (this._impactTimer > 0 && this._impactMesh) {
             this._impactTimer = Math.max(0, this._impactTimer - dt);
-            const t = this._impactTimer / 0.1;
+            const t = this._impactTimer / 0.14;
             this._impactMesh.visible = true;
-            this._impactMesh.scale.setScalar(1 + (1 - t) * 2.5);
-            this._impactMesh.material.opacity = 0.9 * t;
-            this._impactMesh.rotation.z += dt * 6.0;
+            this._impactMesh.scale.setScalar(1 + (1 - t) * 3.2);
+            this._impactMesh.material.opacity = 0.95 * t;
+            this._impactMesh.rotation.z += dt * 6.5;
             if (this._impactTimer === 0) {
                 this._impactMesh.visible = false;
+            }
+        }
+
+        if (this.reloadTimer > 0) {
+            this.reloadTimer = Math.max(0, this.reloadTimer - dt);
+            if (this.reloadTimer === 0) {
+                this.shotsRemaining = this.clipSize;
             }
         }
 
@@ -174,9 +190,14 @@ export class LaserWeapon {
         }
 
         if (!this._isFiring || this._cooldown > 0) return;
+        if (this.reloadTimer > 0 || this.shotsRemaining <= 0) return;
 
         this.fire();
         this._cooldown = 1 / this.fireRate;
+        this.shotsRemaining = Math.max(0, this.shotsRemaining - 1);
+        if (this.shotsRemaining === 0) {
+            this.reloadTimer = this.cooldownDuration;
+        }
     }
 
     fire() {
@@ -205,7 +226,6 @@ export class LaserWeapon {
 
         let hitEntity = null;
         let hitDistance = this.range;
-
         const candidates = typeof this.world.queryNearby === "function" ? this.world.queryNearby(origin, this.range) : this.world.query();
         candidates.forEach((entity) => {
             if (!entity?.group || entity === this.owner) return;
@@ -213,7 +233,8 @@ export class LaserWeapon {
             if (this.owner?.team && entity?.team && this.owner.team === entity.team) return;
             if (typeof entity.hp === "number" && entity.hp <= 0) return;
             const center = entity.group.getWorldPosition(new THREE.Vector3());
-            const sphere = new THREE.Sphere(center, entity.colliderRadius);
+            const effectiveRadius = entity.colliderRadius + this.beamRadius;
+            const sphere = new THREE.Sphere(center, effectiveRadius);
             const hitPoint = ray.intersectSphere(sphere, new THREE.Vector3());
             if (!hitPoint) return;
             const distance = origin.distanceTo(hitPoint);
@@ -234,24 +255,24 @@ export class LaserWeapon {
 
         if (this._glowMesh) {
             this._glowMesh.visible = true;
-            this._glowMesh.scale.set(2.2, hitDistance, 2.2);
+            this._glowMesh.scale.set(2.4, hitDistance, 2.4);
             this._glowMesh.quaternion.copy(this._beamMesh.quaternion);
             this._glowMesh.position.copy(this._beamMesh.position);
         }
 
         if (this._flashMesh) {
-            this._flashTimer = 0.08;
+            this._flashTimer = 0.1;
             this._flashMesh.position.copy(origin);
             this._flashMesh.visible = true;
-            this._flashMesh.material.opacity = 0.9;
+            this._flashMesh.material.opacity = 0.95;
         }
 
         if (this._impactMesh) {
-            this._impactTimer = 0.1;
+            this._impactTimer = 0.14;
             this._impactMesh.position.copy(origin).add(forward.clone().multiplyScalar(hitDistance));
             this._impactMesh.lookAt(origin);
             this._impactMesh.visible = true;
-            this._impactMesh.material.opacity = 0.9;
+            this._impactMesh.material.opacity = 0.95;
         }
 
         if (typeof this.owner?.applyRecoil === "function") {
