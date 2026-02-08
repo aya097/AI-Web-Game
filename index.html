@@ -7,7 +7,8 @@
     <title>AI Web Game - Player Movement Prototype</title>
     <style>
         :root {
-            --ui-scale: min(1.05, 100vw / 1400, 100vh / 900);
+              --ui-scale: 0.85;
+              --ui-scale: min(1, calc(100vw / 1400px), calc(100vh / 900px));
         }
 
         html,
@@ -185,10 +186,10 @@
             color: #e7f6ff;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            transform: scale(var(--ui-scale));
+              transform: scale(var(--ui-scale, 0.85));
             transform-origin: left top;
-            width: calc(100% / var(--ui-scale));
-            height: calc(100% / var(--ui-scale));
+              width: calc(100% / var(--ui-scale, 0.85));
+              height: calc(100% / var(--ui-scale, 0.85));
         }
 
         .hud-left {
