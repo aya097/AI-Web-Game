@@ -7,7 +7,7 @@
     <title>AI Web Game - Player Movement Prototype</title>
     <style>
         :root {
-            --ui-scale: 0.72;
+            --ui-scale: min(1.05, 100vw / 1400, 100vh / 900);
         }
 
         html,
@@ -186,7 +186,9 @@
             text-transform: uppercase;
             letter-spacing: 0.08em;
             transform: scale(var(--ui-scale));
-            transform-origin: center center;
+            transform-origin: left top;
+            width: calc(100% / var(--ui-scale));
+            height: calc(100% / var(--ui-scale));
         }
 
         .hud-left {
@@ -597,7 +599,7 @@
     <div id="overlay">
         <div class="overlay-card">
             <div class="overlay-title">GUNFRAME</div>
-            <div class="overlay-subtitle">BATTLELINE 02.08</div>
+            <div class="overlay-subtitle">BATTLELINE v0.10</div>
             <div class="overlay-text">
                 クリックでポインターロック開始<br />
                 WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / V ブースト<br />
