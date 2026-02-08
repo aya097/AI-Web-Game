@@ -1,22 +1,39 @@
+## 設計レビュー・TODO確認・修正案作成
+
+1. ARCHITECTURE.md・DESIGN.mdの内容を確認し、現状設計を把握する。
+2. TODO.mdの全内容を確認し、タスク一覧を把握する。
+3. 設計とTODOリストを照合し、不整合や改善点を洗い出す。
+4. 必要に応じて設計ドキュメントの修正案をまとめる。
+5. 設計修正後、すぐに着手可能なタスクを1つ選定し、理由とともに提案する。
+
+### 補足
+・設計とTODOの整合性・優先度を重視
+・設計修正は最小限かつ効果的に
+・修正案はユーザー確認後に実施
+
+## Start implementation
+- [ ] 「直近（次に作る要素）」から順に実装を開始する
 # TODO: 3D宇宙アクションゲーム
 
 ## 直近（次に作る要素）
-- [ ] `TargetingSystem`：距離/視野角/優先度ロジック
-- [ ] `LaserWeapon`：ヒットスキャン/連射/射程/ダメージ
-- [ ] `CollisionSystem`：球コライダー判定/ヒット結果
-- [ ] HP/シールド/被弾処理（`IEntity.onDamage()`）
-- [ ] HUD拡張：HP/シールド/ブースト/ロックオン表示
-- [ ] 追従カメラ：スムージング/被弾シェイク
-- [ ] `Enemy` + 最小AI（Patrol/Chase/Attack）
-- [ ] `EntityManager`/`Factory` の使用開始
+- [x] `TargetingSystem`：距離/視野角/優先度ロジック
+- [x] `LaserWeapon`：ヒットスキャン/連射/射程/ダメージ
+- [x] `CollisionSystem`：球コライダー判定/ヒット結果
+- [x] HP/シールド/被弾処理（`IEntity.onDamage()`）
+- [x] HUD拡張：HP/シールド/ロックオン表示
+- [x] HUD拡張：ブースト表示（燃料/クールダウン）
+- [x] 追従カメラ：被弾シェイク
+- [x] 追従カメラ：スムージング
+- [x] `Enemy` + 最小AI（Patrol/Chase/Attack）
+- [x] `EntityManager`/`Factory` の使用開始
 
 ## 中期
-- [ ] `FunnelWeapon`/`FunnelDrone` 実装
-- [ ] スコア/残機/勝敗判定
-- [ ] イベントバス導入（`DamageApplied` 等）
-- [ ] 空間分割（固定グリッド 50m）
-- [ ] ステージ障害物生成
-- [ ] レーダーUI/演出追加
+- [x] `FunnelWeapon`/`FunnelDrone` 実装
+- [x] スコア/残機/勝敗判定
+- [x] イベントバス導入（`DamageApplied` 等）
+- [x] 空間分割（固定グリッド 50m）
+- [x] ステージ障害物生成
+- [x] レーダーUI/演出追加
 
 ## 長期
 - [ ] データ駆動（JSON/スキーマ/ホットリロード）

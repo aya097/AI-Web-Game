@@ -10,18 +10,18 @@ export class FunnelWeapon {
         this.count = count;
         this.inputKey = "funnel";
 
-        this.attackCycles = 3;
+        this.attackCycles = 5;
         this.cycleInterval = 0.45;
         this.cooldownDuration = 3.0;
-        this.orbitRadius = 6;
-        this.orbitHeight = 2.0;
-        this.orbitSpeed = 1.6;
+        this.orbitRadius = 8;
+        this.orbitHeight = 2.6;
+        this.orbitSpeed = 2.4;
         this.followRadius = 4.5;
         this.followHeight = 1.2;
-        this.followSpeed = 6.0;
-        this.returnSpeed = 7.0;
+        this.followSpeed = 9.5;
+        this.returnSpeed = 4.5;
         this.beamDuration = 0.08;
-        this.deployArrivalDistance = 1.0;
+        this.deployArrivalDistance = 2.2;
         this.damage = 6;
 
         this._state = "idle";
@@ -30,12 +30,29 @@ export class FunnelWeapon {
         this._cooldown = 0;
         this._orbitTime = 0;
 
-        this.drones = Array.from({ length: count }, (_, index) => {
-            const drone = new FunnelDrone({ scene });
-            drone.orbitAngle = (index / count) * Math.PI * 2;
-            if (this.world) this.world.add(drone);
-            return drone;
+        this.drones = Array.from({ length: count }, (_, index) => this._createDrone(index));
+    }
+
+    _createDrone(index) {
+        const drone = new FunnelDrone({ scene: this.scene });
+        drone.orbitAngle = (index / this.count) * Math.PI * 2;
+        if (this.world) this.world.add(drone);
+        return drone;
+    }
+
+    destroyDrones() {
+        this.drones.forEach((drone) => {
+            if (this.world) this.world.remove(drone);
+            if (typeof drone.destroy === "function") drone.destroy();
         });
+        this.drones = [];
+        this._state = "idle";
+        this._cooldown = 0;
+    }
+
+    resetDrones() {
+        this.destroyDrones();
+        this.drones = Array.from({ length: this.count }, (_, index) => this._createDrone(index));
     }
 
     setOwner(owner) {
@@ -58,6 +75,7 @@ export class FunnelWeapon {
 
     update(dt) {
         if (!this.owner || !this.owner.group) return;
+        if (!this.drones.length) return;
 
         if (this._cooldown > 0) {
             this._cooldown = Math.max(0, this._cooldown - dt);
@@ -68,10 +86,11 @@ export class FunnelWeapon {
 
         this._orbitTime += dt * this.orbitSpeed;
 
-        if (this._state !== "attacking" && this._state !== "deploying") {
+        if (this._state === "idle") {
             this.drones.forEach((drone, index) => {
                 const angle = this._orbitTime + (index / this.count) * Math.PI * 2;
-                drone.setMode("dock");
+                drone.wobbleScale = 0;
+                drone.setMode("lock");
                 drone.setHomePosition(
                     ownerPos
                         .clone()
@@ -98,6 +117,7 @@ export class FunnelWeapon {
             let allArrived = true;
             this.drones.forEach((drone, index) => {
                 const angle = (index / this.count) * Math.PI * 2;
+                drone.wobbleScale = 0.25;
                 drone.setMode("orbit");
                 drone.setTargetPosition(targetPos);
                 drone.setOrbit({ angle, radius: this.orbitRadius, height: this.orbitHeight, lerpSpeed: this.followSpeed });
@@ -124,6 +144,7 @@ export class FunnelWeapon {
             const targetPos = target.group.getWorldPosition(new THREE.Vector3());
             this.drones.forEach((drone, index) => {
                 const angle = this._orbitTime + (index / this.count) * Math.PI * 2;
+                drone.wobbleScale = 1.0;
                 drone.setMode("orbit");
                 drone.setTargetPosition(targetPos);
                 drone.setOrbit({ angle, radius: this.orbitRadius, height: this.orbitHeight, lerpSpeed: this.followSpeed });
@@ -153,25 +174,34 @@ export class FunnelWeapon {
         }
 
         if (this._state === "returning") {
+            let allLocked = true;
             this.drones.forEach((drone, index) => {
                 const angle = this._orbitTime + (index / this.count) * Math.PI * 2;
-                drone.setMode("return");
-                drone.setHomePosition(
-                    ownerPos
-                        .clone()
-                        .add(
-                            new THREE.Vector3(
-                                Math.cos(angle) * this.followRadius,
-                                this.followHeight,
-                                Math.sin(angle) * this.followRadius
-                            ).applyQuaternion(ownerQuat)
-                        )
-                );
-                drone.setOrbit({ angle, radius: this.followRadius, height: this.followHeight, returnSpeed: this.returnSpeed });
+                const home = ownerPos
+                    .clone()
+                    .add(
+                        new THREE.Vector3(
+                            Math.cos(angle) * this.followRadius,
+                            this.followHeight,
+                            Math.sin(angle) * this.followRadius
+                        ).applyQuaternion(ownerQuat)
+                    );
+
+                drone.wobbleScale = 0;
+                drone.setHomePosition(home);
+
+                const distance = drone.group.position.distanceTo(home);
+                if (distance > 1.4) {
+                    allLocked = false;
+                    drone.setMode("return");
+                } else {
+                    drone.setMode("lock");
+                }
+
+                drone.setOrbit({ angle, radius: this.followRadius, height: this.followHeight, lerpSpeed: this.followSpeed, returnSpeed: this.followSpeed });
             });
 
-            const allDocked = this.drones.every((drone) => drone.mode === "dock");
-            if (allDocked) {
+            if (allLocked) {
                 this._state = "idle";
             }
         }

@@ -39,20 +39,308 @@
 
         #hud {
             position: fixed;
-            left: 12px;
-            bottom: 12px;
-            font-size: 12px;
-            opacity: 0.8;
+            inset: 0;
             pointer-events: none;
+            color: #e7f6ff;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .hud-left {
+            position: fixed;
+            left: 20px;
+            bottom: 20px;
+            width: 260px;
+            padding: 14px 16px;
+            border: 1px solid rgba(90, 180, 255, 0.35);
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(5, 12, 25, 0.85), rgba(9, 21, 38, 0.7));
+            box-shadow: 0 0 20px rgba(90, 180, 255, 0.15);
+            backdrop-filter: blur(6px);
+        }
+
+        .hud-brand {
+            font-size: 13px;
+            font-weight: 700;
+            color: #8fe3ff;
+            text-shadow: 0 0 12px rgba(90, 180, 255, 0.45);
+            margin-bottom: 10px;
+        }
+
+        .hud-stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            margin-bottom: 10px;
+            color: rgba(231, 246, 255, 0.85);
+        }
+
+        .hud-stat .value {
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .hud-bar {
+            position: relative;
+            height: 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(120, 220, 255, 0.45);
+            background: rgba(14, 24, 42, 0.8);
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .hud-bar .fill {
+            position: absolute;
+            inset: 0;
+            width: 0;
+            background: linear-gradient(90deg, rgba(110, 220, 255, 0.9), rgba(45, 160, 255, 0.95));
+            box-shadow: 0 0 12px rgba(90, 180, 255, 0.7);
+            transition: width 0.08s linear;
+        }
+
+        .hud-bar.shield .fill {
+            background: linear-gradient(90deg, rgba(170, 255, 220, 0.85), rgba(80, 220, 180, 0.95));
+            box-shadow: 0 0 12px rgba(90, 255, 220, 0.6);
+        }
+
+        .hud-bar.boost .fill {
+            background: linear-gradient(90deg, rgba(255, 210, 120, 0.9), rgba(255, 140, 70, 0.95));
+            box-shadow: 0 0 12px rgba(255, 190, 90, 0.6);
+        }
+
+        .hud-bar .text {
+            position: relative;
+            z-index: 1;
+            font-size: 10px;
+            padding-left: 10px;
+            line-height: 16px;
+        }
+
+        .hud-right {
+            position: fixed;
+            right: 22px;
+            top: 20px;
+            text-align: right;
+            font-size: 12px;
+            color: #cfefff;
+            text-shadow: 0 0 16px rgba(80, 170, 255, 0.35);
+        }
+
+        .hud-score {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 6px;
+        }
+
+        .hud-lives {
+            font-size: 11px;
+            opacity: 0.85;
+        }
+
+        .hud-result {
+            margin-top: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #ffe08a;
+            text-shadow: 0 0 14px rgba(255, 200, 120, 0.6);
+        }
+
+        .hud-center {
+            position: fixed;
+            left: 50%;
+            bottom: 88px;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: rgba(200, 245, 255, 0.9);
+            text-shadow: 0 0 10px rgba(90, 180, 255, 0.4);
+            padding: 6px 12px;
+            border: 1px solid rgba(120, 220, 255, 0.25);
+            border-radius: 12px;
+            background: rgba(5, 12, 25, 0.6);
+        }
+
+        .hud-lock-panel {
+            position: fixed;
+            left: 50%;
+            top: 20px;
+            transform: translateX(-50%);
+            min-width: 220px;
+            padding: 10px 14px;
+            border: 1px solid rgba(120, 220, 255, 0.35);
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(6, 14, 26, 0.85), rgba(7, 18, 30, 0.7));
+            text-align: center;
+            box-shadow: 0 0 18px rgba(90, 180, 255, 0.2);
+        }
+
+        .hud-lock-panel.empty {
+            opacity: 0.5;
+            border-color: rgba(120, 220, 255, 0.2);
+            box-shadow: none;
+        }
+
+        .hud-lock-title {
+            font-size: 10px;
+            letter-spacing: 0.2em;
+            color: rgba(160, 235, 255, 0.8);
+            margin-bottom: 4px;
+        }
+
+        .hud-lock-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: #ffffff;
+            text-shadow: 0 0 12px rgba(120, 220, 255, 0.6);
+        }
+
+        .hud-lock-distance {
+            font-size: 11px;
+            color: rgba(200, 245, 255, 0.85);
+            margin: 2px 0 6px;
+        }
+
+        .hud-lock-bar {
+            position: relative;
+            height: 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(120, 220, 255, 0.4);
+            background: rgba(10, 20, 34, 0.8);
+            overflow: hidden;
+        }
+
+        .hud-lock-bar .fill {
+            position: absolute;
+            inset: 0;
+            width: 0;
+            background: linear-gradient(90deg, rgba(255, 120, 120, 0.9), rgba(255, 70, 70, 0.95));
+            box-shadow: 0 0 10px rgba(255, 120, 120, 0.6);
+            transition: width 0.08s linear;
+        }
+
+        .hud-lock-bar.shield .fill {
+            background: linear-gradient(90deg, rgba(170, 255, 220, 0.85), rgba(80, 220, 180, 0.95));
+            box-shadow: 0 0 10px rgba(90, 255, 220, 0.6);
+        }
+
+        .hud-lock-hp {
+            font-size: 10px;
+            margin-top: 4px;
+            color: rgba(255, 220, 220, 0.9);
+        }
+
+        .hud-funnel {
+            position: fixed;
+            right: 22px;
+            bottom: 22px;
+            width: 130px;
+            display: grid;
+            grid-template-columns: 34px 1fr;
+            grid-template-rows: auto auto;
+            gap: 8px 10px;
+            align-items: center;
+            padding: 10px 12px;
+            border: 1px solid rgba(120, 220, 255, 0.35);
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(5, 12, 25, 0.85), rgba(9, 21, 38, 0.7));
+            box-shadow: 0 0 18px rgba(90, 180, 255, 0.18);
+        }
+
+        .hud-funnel-key {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            border: 1px solid rgba(150, 220, 255, 0.6);
+            display: grid;
+            place-items: center;
+            font-weight: 700;
+            color: #e6f7ff;
+            background: rgba(14, 24, 42, 0.8);
+            box-shadow: inset 0 0 10px rgba(120, 220, 255, 0.25);
+        }
+
+        .hud-funnel-icon {
+            position: relative;
+            width: 100%;
+            height: 34px;
+        }
+
+        .hud-funnel-icon .drone {
+            position: absolute;
+            left: 4px;
+            top: 50%;
+            width: 20px;
+            height: 20px;
+            border-radius: 50% 50% 30% 30%;
+            border: 1px solid rgba(140, 220, 255, 0.8);
+            transform: translateY(-50%);
+            background: radial-gradient(circle at 50% 40%, rgba(140, 220, 255, 0.9), rgba(40, 120, 180, 0.6));
+            box-shadow: 0 0 10px rgba(120, 220, 255, 0.4);
+        }
+
+        .hud-funnel-icon .ring {
+            position: absolute;
+            left: 26px;
+            top: 50%;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 1px dashed rgba(120, 220, 255, 0.7);
+            transform: translateY(-50%);
+            box-shadow: 0 0 10px rgba(120, 220, 255, 0.35);
+        }
+
+        .hud-funnel-cd {
+            grid-column: 1 / -1;
+            position: relative;
+            height: 34px;
+            border-radius: 10px;
+            border: 1px solid rgba(120, 220, 255, 0.35);
+            background: rgba(10, 20, 34, 0.8);
+            overflow: hidden;
+        }
+
+        .hud-funnel-cd .fill {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 0;
+            background: linear-gradient(180deg, rgba(110, 220, 255, 0.9), rgba(45, 160, 255, 0.95));
+            box-shadow: 0 0 12px rgba(90, 180, 255, 0.5);
+            transition: height 0.08s linear;
+        }
+
+        .hud-funnel-cd .text {
+            position: relative;
+            z-index: 1;
+            font-size: 10px;
+            line-height: 34px;
+            padding-left: 10px;
+            letter-spacing: 0.2em;
+            color: rgba(200, 245, 255, 0.9);
+        }
+
+        #minimap {
+            position: fixed;
+            right: 20px;
+            top: 84px;
+            width: 180px;
+            height: 180px;
+            border-radius: 16px;
+            border: 1px solid rgba(120, 220, 255, 0.35);
+            background: rgba(5, 12, 25, 0.65);
+            box-shadow: 0 0 20px rgba(90, 180, 255, 0.15);
         }
 
         #lockon {
             position: fixed;
-            width: 48px;
-            height: 48px;
-            border: 2px solid rgba(120, 220, 255, 0.9);
+            width: 54px;
+            height: 54px;
+            border: 2px solid rgba(120, 220, 255, 0.95);
             border-radius: 50%;
-            box-shadow: 0 0 12px rgba(120, 220, 255, 0.8);
+            box-shadow: 0 0 16px rgba(120, 220, 255, 0.85), inset 0 0 10px rgba(120, 220, 255, 0.6);
             transform: translate(-50%, -50%);
             pointer-events: none;
             display: none;
@@ -62,9 +350,54 @@
         #lockon::after {
             content: "";
             position: absolute;
-            inset: 8px;
-            border: 1px dashed rgba(120, 220, 255, 0.7);
+            inset: 9px;
+            border: 1px dashed rgba(120, 220, 255, 0.8);
             border-radius: 50%;
+        }
+
+        #lockon::before {
+            content: "";
+            position: absolute;
+            inset: -6px;
+            border: 1px solid rgba(120, 220, 255, 0.3);
+            border-radius: 50%;
+            animation: lockonSweep 1.4s linear infinite;
+        }
+
+        #reticle {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            width: 26px;
+            height: 26px;
+            transform: translate(-50%, -50%);
+            border: 1px solid rgba(200, 245, 255, 0.75);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(120, 220, 255, 0.45);
+            pointer-events: none;
+        }
+
+        #reticle::before,
+        #reticle::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            background: rgba(200, 245, 255, 0.75);
+        }
+
+        #reticle::before {
+            width: 14px;
+            height: 1px;
+            margin-left: -7px;
+            margin-top: -0.5px;
+        }
+
+        #reticle::after {
+            width: 1px;
+            height: 14px;
+            margin-left: -0.5px;
+            margin-top: -7px;
         }
 
         @keyframes lockonPulse {
@@ -80,13 +413,27 @@
                 opacity: 0.6;
             }
         }
+
+        @keyframes lockonSweep {
+            0% {
+                transform: rotate(0deg);
+                opacity: 0.9;
+            }
+
+            100% {
+                transform: rotate(360deg);
+                opacity: 0.2;
+            }
+        }
     </style>
 </head>
 
 <body>
-    <div id="overlay"><span>クリックでポインターロック開始<br />WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / Left Ctrl
+    <div id="overlay"><span>クリックでポインターロック開始<br />WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / V
             ブースト<br />左クリック 射撃 / R ロックオン / F ファンネル<br />マウスで視点操作</span></div>
+    <div id="reticle"></div>
     <div id="hud"></div>
+    <canvas id="minimap"></canvas>
     <div id="lockon"></div>
     <script type="module" src="./src/main.js"></script>
 </body>

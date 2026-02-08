@@ -2,44 +2,32 @@ import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { InputSystem } from "./systems/InputSystem.js";
 import { SixDoFMovement } from "./movement/SixDoFMovement.js";
 import { Player } from "./entities/Player.js";
+import { Enemy } from "./entities/Enemy.js";
 import { Game } from "./core/Game.js";
 import { World } from "./core/World.js";
+import { EntityManager } from "./core/EntityManager.js";
+import { EventBus } from "./core/EventBus.js";
 import { HUD } from "./ui/HUD.js";
 import { CollisionSystem } from "./systems/CollisionSystem.js";
 import { TargetingSystem } from "./systems/TargetingSystem.js";
 import { FunnelWeapon } from "./weapons/FunnelWeapon.js";
+import { LaserWeapon } from "./weapons/LaserWeapon.js";
+import { EnemyAI } from "./ai/EnemyAI.js";
+import { GAME_CONFIG } from "./config/gameConfig.js";
+import { createVfxManager } from "./vfx/ExplosionVFX.js";
+import { SfxManager } from "./audio/SfxManager.js";
 
-const SETTINGS = {
-    background: 0x05060a,
-    camera: {
-        fov: 60,
-        near: 0.1,
-        far: 2000,
-        offset: new THREE.Vector3(0, 3, -12),
-    },
-    grid: {
-        size: 400,
-        divisions: 80,
-        color1: 0x2a3b5f,
-        color2: 0x111827,
-    },
-    stars: {
-        count: 1500,
-        radius: 900,
-        size: 1.2,
-    },
-    light: {
-        directional: { color: 0xffffff, intensity: 1.1, position: [10, 20, 10] },
-        ambient: { color: 0x4a4a4a },
-    },
-};
+const SETTINGS = GAME_CONFIG;
 
 const overlay = document.getElementById("overlay");
 const hud = document.getElementById("hud");
 const lockOnElement = document.getElementById("lockon");
+const reticleElement = document.getElementById("reticle");
+const minimapCanvas = document.getElementById("minimap");
+const minimapCtx = minimapCanvas?.getContext("2d") || null;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(SETTINGS.background);
+scene.background = new THREE.Color(SETTINGS.visuals.background);
 
 const camera = new THREE.PerspectiveCamera(
     SETTINGS.camera.fov,
@@ -52,9 +40,25 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
+const minimapConfig = SETTINGS.minimap;
+
+const setupMinimap = () => {
+    if (!minimapCanvas || !minimapCtx) return;
+    const dpr = window.devicePixelRatio || 1;
+    minimapCanvas.width = minimapConfig.size * dpr;
+    minimapCanvas.height = minimapConfig.size * dpr;
+    minimapCanvas.style.width = `${minimapConfig.size}px`;
+    minimapCanvas.style.height = `${minimapConfig.size}px`;
+    minimapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+};
+
+setupMinimap();
+
 const input = new InputSystem(renderer.domElement);
+const sfx = new SfxManager();
 renderer.domElement.addEventListener("click", () => {
     renderer.domElement.requestPointerLock();
+    sfx.unlock();
 });
 
 document.addEventListener("pointerlockchange", () => {
@@ -62,18 +66,18 @@ document.addEventListener("pointerlockchange", () => {
 });
 
 const light = new THREE.DirectionalLight(
-    SETTINGS.light.directional.color,
-    SETTINGS.light.directional.intensity
+    SETTINGS.visuals.light.directional.color,
+    SETTINGS.visuals.light.directional.intensity
 );
-light.position.set(...SETTINGS.light.directional.position);
+light.position.set(...SETTINGS.visuals.light.directional.position);
 scene.add(light);
-scene.add(new THREE.AmbientLight(SETTINGS.light.ambient.color));
+scene.add(new THREE.AmbientLight(SETTINGS.visuals.light.ambient.color));
 
 const grid = new THREE.GridHelper(
-    SETTINGS.grid.size,
-    SETTINGS.grid.divisions,
-    SETTINGS.grid.color1,
-    SETTINGS.grid.color2
+    SETTINGS.visuals.grid.size,
+    SETTINGS.visuals.grid.divisions,
+    SETTINGS.visuals.grid.color1,
+    SETTINGS.visuals.grid.color2
 );
 grid.rotation.x = Math.PI / 2;
 scene.add(grid);
@@ -81,8 +85,10 @@ scene.add(grid);
 const axisHelper = new THREE.AxesHelper(6);
 scene.add(axisHelper);
 
+const { spawnHitEffect, spawnExplosionEffect, system: vfxSystem } = createVfxManager(scene);
+
 function createStars() {
-    const { count, radius, size } = SETTINGS.stars;
+    const { count, radius, size } = SETTINGS.visuals.stars;
     const starGeometry = new THREE.BufferGeometry();
     const starPositions = new Float32Array(count * 3);
     for (let i = 0; i < count; i += 1) {
@@ -115,6 +121,36 @@ const decoyHitMaterial = new THREE.MeshStandardMaterial({
     roughness: 0.4,
     emissive: 0x1a7a4c,
 });
+
+const obstaclePalette = [0x2f3b4a, 0x4d5d73, 0x3b4556, 0x5a6b82, 0x6a7b94, 0x38424f];
+
+function createObstacleMesh(radius) {
+    const geometry = new THREE.SphereGeometry(radius, 18, 18);
+    const position = geometry.attributes.position;
+    const noiseStrength = radius * 0.25;
+    const temp = new THREE.Vector3();
+
+    for (let i = 0; i < position.count; i += 1) {
+        temp.fromBufferAttribute(position, i);
+        const noise = (Math.random() - 0.5) * noiseStrength;
+        temp.multiplyScalar(1 + noise / radius);
+        position.setXYZ(i, temp.x, temp.y, temp.z);
+    }
+
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    const colliderRadius = geometry.boundingSphere?.radius ?? radius;
+
+    const material = new THREE.MeshStandardMaterial({
+        color: obstaclePalette[Math.floor(Math.random() * obstaclePalette.length)],
+        roughness: 0.95,
+        metalness: 0.05,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.scale.set(1 + Math.random() * 0.35, 0.85 + Math.random() * 0.35, 1 + Math.random() * 0.35);
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    return { mesh, colliderRadius: colliderRadius * Math.max(mesh.scale.x, mesh.scale.y, mesh.scale.z) };
+}
 
 function createDecoy(position) {
     const group = new THREE.Group();
@@ -294,6 +330,7 @@ function createDecoy(position) {
         group,
         colliderRadius: 2,
         isDecoy: true,
+        isTargetable: true,
         maxHp: 30,
         hp: 30,
         _hitTimer: 0,
@@ -409,33 +446,176 @@ function createDecoy(position) {
 }
 
 const playerMovement = new SixDoFMovement({
-    maxSpeed: 80,
-    boostMultiplier: 2.0,
-    acceleration: 40,
+    maxSpeed: SETTINGS.player.maxSpeed,
+    boostMultiplier: SETTINGS.player.boostMultiplier,
+    acceleration: SETTINGS.player.acceleration,
 });
 const player = new Player(playerMovement);
+player.maxBoostFuel = SETTINGS.player.boostFuel ?? player.maxBoostFuel;
+player.boostFuel = player.maxBoostFuel;
+player.boostRegenDelay = SETTINGS.player.boostRegenDelay ?? player.boostRegenDelay;
+player.boostRegenRate = SETTINGS.player.boostRegenRate ?? player.boostRegenRate;
+player._deathHandled = false;
 scene.add(player.group);
 
 const cameraOffset = SETTINGS.camera.offset.clone();
 const cameraTarget = new THREE.Vector3();
 const cameraOffsetWorld = new THREE.Vector3();
+const cameraShakeOffset = new THREE.Vector3();
+const cameraFollowDelta = new THREE.Vector3();
+const cameraTargetDelta = new THREE.Vector3();
+let cameraShakeTime = 0;
+const cameraShakeDuration = SETTINGS.camera.shake.duration;
+const cameraShakeMax = SETTINGS.camera.shake.strength;
+const cameraSmoothingRaw = SETTINGS.camera.smoothing ?? 0;
+const cameraSmoothing = cameraSmoothingRaw > 0
+    ? THREE.MathUtils.clamp(cameraSmoothingRaw, 0.03, 0.2)
+    : 0;
+const cameraSmoothingDeadzone = SETTINGS.camera.smoothingDeadzone ?? 0;
+const cameraSmoothingMaxStep = SETTINGS.camera.smoothingMaxStep ?? Infinity;
+const cameraSmoothingMaxLag = SETTINGS.camera.smoothingMaxLag ?? 6;
 
-const world = new World();
+const world = new World({ cellSize: SETTINGS.spatialIndex.cellSize });
 world.add(player);
 
+const gameState = {
+    score: 0,
+    lives: SETTINGS.gameplay.lives,
+    elapsedTime: 0,
+    kills: 0,
+    comboCount: 0,
+    lastKillTime: -Infinity,
+    respawnTimer: 0,
+    isRespawning: false,
+    result: null,
+};
+
+const events = new EventBus();
+
+const baseOnDamage = player.onDamage.bind(player);
+player.onDamage = (amount) => {
+    if (gameState.isRespawning || gameState.result) return false;
+    const isDead = baseOnDamage(amount);
+    cameraShakeTime = cameraShakeDuration;
+    spawnHitEffect(player.group.getWorldPosition(new THREE.Vector3()), 0x7ad7ff);
+    sfx.playHit();
+    if (isDead && !player._deathHandled) {
+        player._deathHandled = true;
+        const pos = player.group.getWorldPosition(new THREE.Vector3());
+        spawnExplosionEffect(pos, 0x7ad7ff);
+        sfx.playExplosion();
+        player.weapons.forEach((weapon) => {
+            if (typeof weapon.clearVisuals === "function") {
+                weapon.clearVisuals();
+            }
+            if (typeof weapon.destroyDrones === "function") {
+                weapon.drones?.forEach((drone) => {
+                    if (drone?.group) {
+                        spawnExplosionEffect(drone.group.getWorldPosition(new THREE.Vector3()), 0x7ad7ff);
+                    }
+                });
+                weapon.destroyDrones();
+            }
+        });
+    }
+    return isDead;
+};
+
+const entityFactory = {
+    create(type, data = {}) {
+        if (type === "decoy") {
+            const position = data.position || new THREE.Vector3();
+            const decoy = createDecoy(position);
+            if (decoy.group) scene.add(decoy.group);
+            return decoy;
+        }
+        if (type === "enemy") {
+            const enemyType = data.enemyType || "grunt";
+            const stats = SETTINGS.enemies.types[enemyType] ?? SETTINGS.enemies.types.grunt;
+            const enemyMovement = new SixDoFMovement({ maxSpeed: 60, boostMultiplier: 1.2, acceleration: 28, damping: 0.99 });
+            const enemy = new Enemy(enemyMovement, null, { type: enemyType, stats, events });
+            enemy.name = stats.name;
+            if (data.position) enemy.group.position.copy(data.position);
+            const enemyAI = new EnemyAI({ owner: enemy, target: player, profile: stats.ai });
+            enemy.ai = enemyAI;
+            const enemyLaser = new LaserWeapon({
+                owner: enemy,
+                world,
+                scene,
+                damage: SETTINGS.weapons.enemyLaser.damage,
+                range: SETTINGS.weapons.enemyLaser.range,
+                fireRate: stats.fireRate ?? SETTINGS.weapons.enemyLaser.fireRate,
+                beamColor: SETTINGS.weapons.enemyLaser.beamColor,
+                beamEmissive: SETTINGS.weapons.enemyLaser.beamEmissive,
+                beamRadius: SETTINGS.weapons.enemyLaser.beamRadius,
+                beamDuration: SETTINGS.weapons.enemyLaser.beamDuration,
+                getMuzzleWorldPosition: () =>
+                    enemy.weaponMuzzle
+                        ? enemy.weaponMuzzle.getWorldPosition(new THREE.Vector3())
+                        : enemy.group.getWorldPosition(new THREE.Vector3()),
+                onFire: () => sfx.playLaser({ isEnemy: true }),
+            });
+            enemy.weapons.push(enemyLaser);
+            if (enemy.group) scene.add(enemy.group);
+            return enemy;
+        }
+        if (type === "asteroid") {
+            const radius = data.radius ?? 12;
+            const { mesh, colliderRadius } = createObstacleMesh(radius);
+            const group = new THREE.Group();
+            group.add(mesh);
+            if (data.position) group.position.copy(data.position);
+            const asteroid = {
+                name: "Asteroid",
+                group,
+                colliderRadius,
+                isObstacle: true,
+                isTargetable: false,
+                update() { },
+            };
+            scene.add(group);
+            return asteroid;
+        }
+        throw new Error(`Unknown entity type: ${type}`);
+    },
+};
+
+const entityManager = new EntityManager(world, entityFactory);
+
 const decoys = [
-    createDecoy(new THREE.Vector3(0, 0, 120)),
-    createDecoy(new THREE.Vector3(30, 10, 180)),
-    createDecoy(new THREE.Vector3(-40, -5, 160)),
-];
-decoys.forEach((decoy) => {
-    scene.add(decoy.group);
-    world.add(decoy);
+    new THREE.Vector3(0, 0, 120),
+    new THREE.Vector3(30, 10, 180),
+    new THREE.Vector3(-40, -5, 160),
+].map((position) => entityManager.spawn("decoy", { position }));
+
+const randomInRange = (min, max) => min + Math.random() * (max - min);
+const spawnObstacleField = () => {
+    const [minRadius, maxRadius] = SETTINGS.obstacles.radiusRange;
+    const [minDist, maxDist] = SETTINGS.obstacles.distanceRange;
+
+    for (let i = 0; i < SETTINGS.obstacles.count; i += 1) {
+        const radius = randomInRange(minRadius, maxRadius);
+        const dist = randomInRange(minDist, maxDist);
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const position = new THREE.Vector3(
+            dist * Math.sin(phi) * Math.cos(theta),
+            dist * Math.cos(phi),
+            dist * Math.sin(phi) * Math.sin(theta)
+        );
+        entityManager.spawn("asteroid", { radius, position });
+    }
+};
+if (SETTINGS.obstacles.count > 0) {
+    spawnObstacleField();
+}
+
+const targetingSystem = new TargetingSystem({
+    camera,
+    maxDistance: SETTINGS.targeting.maxDistance,
+    fovDegrees: SETTINGS.targeting.fovDegrees,
+    lockOffDistance: SETTINGS.targeting.lockOffDistance,
 });
-
-const targetingSystem = new TargetingSystem({ camera, maxDistance: 300, fovDegrees: 30 });
-const hudView = new HUD(hud, { player, movement: playerMovement, targeting: targetingSystem });
-
 const funnelWeapon = new FunnelWeapon({
     owner: player,
     world,
@@ -445,8 +625,76 @@ const funnelWeapon = new FunnelWeapon({
 });
 player.addWeapon(funnelWeapon);
 
+const hudView = new HUD(hud, { player, movement: playerMovement, targeting: targetingSystem, funnelWeapon, gameState });
+
+const playerMuzzleOffset = new THREE.Vector3(0.0, 0.25, 0.35);
+const playerReticleOffset = new THREE.Vector3(0.0, 0.55, 0.35);
+const playerMuzzleWorld = new THREE.Vector3();
+const playerMuzzleOffsetWorld = new THREE.Vector3();
+const playerAimDirection = new THREE.Vector3();
+const playerReticleWorld = new THREE.Vector3();
+const playerReticleOffsetWorld = new THREE.Vector3();
+const playerReticleRayPoint = new THREE.Vector3();
+
+const getRightShoulderBase = () =>
+(player.shoulderPivotRight
+    ? player.shoulderPivotRight.getWorldPosition(playerMuzzleWorld)
+    : player.group.getWorldPosition(playerMuzzleWorld));
+
+const getPlayerMuzzleWorld = () => {
+    const base = getRightShoulderBase();
+    playerMuzzleOffsetWorld.copy(playerMuzzleOffset).applyQuaternion(player.group.quaternion);
+    return base.add(playerMuzzleOffsetWorld);
+};
+
+const getPlayerReticleWorld = () => {
+    const base = getRightShoulderBase();
+    playerReticleOffsetWorld.copy(playerReticleOffset).applyQuaternion(player.group.quaternion);
+    return playerReticleWorld.copy(base).add(playerReticleOffsetWorld);
+};
+
+const playerLaser = new LaserWeapon({
+    owner: player,
+    world,
+    scene,
+    damage: SETTINGS.weapons.playerLaser.damage,
+    range: SETTINGS.weapons.playerLaser.range,
+    fireRate: SETTINGS.weapons.playerLaser.fireRate,
+    beamColor: SETTINGS.weapons.playerLaser.beamColor,
+    beamEmissive: SETTINGS.weapons.playerLaser.beamEmissive,
+    beamRadius: SETTINGS.weapons.playerLaser.beamRadius,
+    beamDuration: SETTINGS.weapons.playerLaser.beamDuration,
+    getMuzzleWorldPosition: () => {
+        return getPlayerMuzzleWorld();
+    },
+    getAimDirection: () => {
+        const reticleWorld = getPlayerReticleWorld();
+        const cameraRayDir = reticleWorld.clone().sub(camera.position).normalize();
+        const rayDistance = SETTINGS.weapons.playerLaser.range ?? 500;
+        playerReticleRayPoint.copy(camera.position).addScaledVector(cameraRayDir, rayDistance);
+        const muzzleWorld = getPlayerMuzzleWorld();
+        return playerAimDirection.copy(playerReticleRayPoint).sub(muzzleWorld).normalize();
+    },
+    inputKey: "fire",
+    recoilKick: 0.35,
+    onFire: () => sfx.playLaser({ isEnemy: false }),
+});
+player.addWeapon(playerLaser);
+
 const playerInputSystem = {
     beforeUpdate: ({ input: inputState }) => {
+        if (player.hp <= 0 || gameState.isRespawning || gameState.result) {
+            player.applyInput({
+                move: { forward: 0, right: 0, up: 0 },
+                roll: 0,
+                boost: false,
+                fire: false,
+                lockOn: false,
+                funnel: false,
+                mouseDelta: { x: 0, y: 0 },
+            });
+            return;
+        }
         player.applyInput(inputState);
     },
 };
@@ -454,6 +702,7 @@ const playerInputSystem = {
 let lastLockInput = false;
 const lockOnSystem = {
     update: ({ input: inputState, world: currentWorld }) => {
+        targetingSystem.update();
         const lockPressed = inputState.lockOn;
         const justPressed = lockPressed && !lastLockInput;
         lastLockInput = lockPressed;
@@ -464,121 +713,109 @@ const lockOnSystem = {
             return;
         }
 
-        const candidates = currentWorld.query().filter((entity) => entity?.isDecoy);
+        const candidates = currentWorld.query().filter((entity) => entity?.isTargetable);
         targetingSystem.acquireTarget(candidates);
     },
 };
 
-const beamRange = 500;
-const beamGeometry = new THREE.CylinderGeometry(0.08, 0.08, 1, 8, 1, true);
-const beamMaterial = new THREE.MeshStandardMaterial({
-    color: 0x9fd7ff,
-    emissive: 0x5ad1ff,
-    emissiveIntensity: 1.2,
-    transparent: true,
-    opacity: 0.8,
-});
-const beamMesh = new THREE.Mesh(beamGeometry, beamMaterial);
-beamMesh.visible = false;
-scene.add(beamMesh);
+const spawnState = {
+    timer: 0,
+    nextInterval: SETTINGS.enemies.spawn.baseInterval,
+};
 
-const muzzleFlash = new THREE.Mesh(
-    new THREE.SphereGeometry(0.18, 12, 12),
-    new THREE.MeshStandardMaterial({
-        color: 0xc9f2ff,
-        emissive: 0x7ad7ff,
-        emissiveIntensity: 2.0,
-        transparent: true,
-        opacity: 0.9,
-    })
-);
-muzzleFlash.visible = false;
-scene.add(muzzleFlash);
+const chooseEnemyType = () => {
+    const t = gameState.elapsedTime;
+    if (t > SETTINGS.gameplay.timeLimit * 0.6 && Math.random() < 0.4) return "ace";
+    if (t > SETTINGS.gameplay.timeLimit * 0.3 && Math.random() < 0.2) return "ace";
+    return "grunt";
+};
 
-let muzzleFlashTimer = 0;
-const muzzleOffset = new THREE.Vector3(0.6, 1.4, 0.9);
-let beamTimer = 0;
-let fireCooldown = 0;
-const fireCooldownDuration = 0.25;
-let lastFireInput = false;
+const spawnEnemy = () => {
+    const [minR, maxR] = SETTINGS.enemies.spawn.radiusRange;
+    const [minY, maxY] = SETTINGS.enemies.spawn.heightRange;
+    const radius = randomInRange(minR, maxR);
+    const angle = Math.random() * Math.PI * 2;
+    const position = player.group.position
+        .clone()
+        .add(new THREE.Vector3(Math.cos(angle) * radius, randomInRange(minY, maxY), Math.sin(angle) * radius));
+    const enemyType = chooseEnemyType();
+    entityManager.spawn("enemy", { position, enemyType });
+};
 
-const weaponSystem = {
-    update: ({ input: inputState, dt }) => {
-        const firePressed = inputState.fire;
-        const justPressed = firePressed && !lastFireInput;
-        lastFireInput = firePressed;
+events.on("enemyKilled", ({ enemy }) => {
+    const now = gameState.elapsedTime;
+    if (now - gameState.lastKillTime <= SETTINGS.gameplay.comboWindow) {
+        gameState.comboCount += 1;
+        gameState.score += SETTINGS.gameplay.comboBonus;
+    } else {
+        gameState.comboCount = 1;
+    }
+    gameState.lastKillTime = now;
+    gameState.kills += 1;
+    gameState.score += enemy?.scoreValue ?? 100;
+    if (enemy?.group) {
+        spawnExplosionEffect(enemy.group.getWorldPosition(new THREE.Vector3()), 0xff7a7a);
+    }
+    sfx.playExplosion();
 
-        if (fireCooldown > 0) {
-            fireCooldown = Math.max(0, fireCooldown - dt);
-        }
-
-        if (beamTimer > 0) {
-            beamTimer = Math.max(0, beamTimer - dt);
-            if (beamTimer === 0) {
-                beamMesh.visible = false;
-            }
-        }
-
-        if (muzzleFlashTimer > 0) {
-            muzzleFlashTimer = Math.max(0, muzzleFlashTimer - dt);
-            if (muzzleFlashTimer === 0) {
-                muzzleFlash.visible = false;
-            }
-        }
-
-        if (!justPressed || fireCooldown > 0) return;
-
-        const origin = player.group
-            .getWorldPosition(new THREE.Vector3())
-            .add(muzzleOffset.clone().applyQuaternion(player.group.quaternion));
-        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(player.group.quaternion).normalize();
-        const ray = new THREE.Ray(origin, forward);
-
-        let hitEntity = null;
-        let hitDistance = beamRange;
-
-        world.query().forEach((entity) => {
-            if (!entity?.isDecoy || !entity.group || typeof entity.colliderRadius !== "number") return;
-            const center = entity.group.getWorldPosition(new THREE.Vector3());
-            const sphere = new THREE.Sphere(center, entity.colliderRadius);
-            const hitPoint = ray.intersectSphere(sphere, new THREE.Vector3());
-            if (!hitPoint) return;
-            const distance = origin.distanceTo(hitPoint);
-            if (distance < hitDistance) {
-                hitDistance = distance;
-                hitEntity = entity;
+    if (enemy?.group) {
+        const epicenter = enemy.group.getWorldPosition(new THREE.Vector3());
+        const nearby = world.queryNearby ? world.queryNearby(epicenter, 55) : world.query();
+        nearby.forEach((entity) => {
+            if (entity?.applyStun) {
+                entity.applyStun(0.9);
             }
         });
+    }
+});
 
-        beamMesh.visible = true;
-        beamMesh.scale.set(1, hitDistance, 1);
-        beamMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), forward);
-        beamMesh.position.copy(origin).add(forward.clone().multiplyScalar(hitDistance * 0.5));
-        beamTimer = 0.07;
-
-        muzzleFlash.visible = true;
-        muzzleFlash.position.copy(origin);
-        muzzleFlashTimer = 0.06;
-        fireCooldown = fireCooldownDuration;
-
-        if (hitEntity) {
-            if (typeof hitEntity.onDamage === "function") {
-                hitEntity.onDamage(10);
-            } else if (typeof hitEntity.onHit === "function") {
-                hitEntity.onHit();
-            }
-        }
-    },
-};
+events.on("enemyHit", ({ enemy }) => {
+    if (!enemy?.group) return;
+    spawnHitEffect(enemy.group.getWorldPosition(new THREE.Vector3()), 0xff6b6b);
+    sfx.playHit();
+});
 
 const collisionSystem = new CollisionSystem();
 
 const cameraFollowSystem = {
-    afterUpdate: () => {
+    afterUpdate: ({ dt }) => {
         cameraOffsetWorld.copy(cameraOffset).applyQuaternion(player.group.quaternion);
         const desired = player.group.position.clone().add(cameraOffsetWorld);
-        camera.position.copy(desired);
-        cameraTarget.copy(player.group.position);
+        const targetDesired = player.group.position;
+        const lerpFactor = cameraSmoothing > 0 ? 1 - Math.exp(-dt / cameraSmoothing) : 1;
+
+        const applyFollow = (current, desiredPos, deltaVec) => {
+            deltaVec.copy(desiredPos).sub(current);
+            const distance = deltaVec.length();
+            if (distance <= cameraSmoothingDeadzone) return;
+
+            let moveLen = distance * lerpFactor;
+            const requiredMove = distance > cameraSmoothingMaxLag ? distance - cameraSmoothingMaxLag : 0;
+            moveLen = Math.max(moveLen, requiredMove);
+            moveLen = Math.min(moveLen, cameraSmoothingMaxStep, distance);
+            if (moveLen <= 0) return;
+
+            deltaVec.multiplyScalar(moveLen / distance);
+            current.add(deltaVec);
+        };
+
+        applyFollow(camera.position, desired, cameraFollowDelta);
+        applyFollow(cameraTarget, targetDesired, cameraTargetDelta);
+
+        if (cameraShakeTime > 0) {
+            cameraShakeTime = Math.max(0, cameraShakeTime - dt);
+            const shakeStrength = (cameraShakeTime / cameraShakeDuration) * cameraShakeMax;
+            cameraShakeOffset.set(
+                (Math.random() - 0.5) * 2 * shakeStrength,
+                (Math.random() - 0.5) * 2 * shakeStrength,
+                (Math.random() - 0.5) * 2 * shakeStrength
+            );
+        } else {
+            cameraShakeOffset.set(0, 0, 0);
+        }
+
+        camera.position.add(cameraShakeOffset);
+        cameraTarget.add(cameraShakeOffset);
         camera.lookAt(cameraTarget);
     },
 };
@@ -588,22 +825,203 @@ const lockOnUiSystem = {
         const target = targetingSystem.getCurrentTarget();
         if (!lockOnElement || !target?.group) {
             if (lockOnElement) lockOnElement.style.display = "none";
+        } else {
+            const targetPos = target.group.getWorldPosition(new THREE.Vector3());
+            const projected = targetPos.project(camera);
+            const isInFront = projected.z > -1 && projected.z < 1;
+            if (!isInFront) {
+                lockOnElement.style.display = "none";
+            } else {
+                const x = (projected.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+                const y = (-projected.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+                lockOnElement.style.left = `${x}px`;
+                lockOnElement.style.top = `${y}px`;
+                lockOnElement.style.display = "block";
+            }
+        }
+
+        if (!reticleElement) return;
+        const reticleWorld = getPlayerReticleWorld();
+        const projectedReticle = reticleWorld.project(camera);
+        const reticleInFront = projectedReticle.z > -1 && projectedReticle.z < 1;
+        if (!reticleInFront) {
+            reticleElement.style.display = "none";
+            return;
+        }
+        const rx = (projectedReticle.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+        const ry = (-projectedReticle.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+        reticleElement.style.left = `${rx}px`;
+        reticleElement.style.top = `${ry}px`;
+        reticleElement.style.display = "block";
+    },
+};
+
+const minimapSystem = {
+    afterUpdate: () => {
+        if (!minimapCtx || !minimapCanvas) return;
+
+        const size = minimapConfig.size;
+        const center = size / 2;
+        const ctx = minimapCtx;
+        ctx.clearRect(0, 0, size, size);
+
+        ctx.save();
+        ctx.translate(center, center);
+
+        ctx.beginPath();
+        ctx.arc(0, 0, minimapConfig.radius, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.fillStyle = "rgba(6, 14, 26, 0.65)";
+        ctx.fillRect(-center, -center, size, size);
+
+        ctx.strokeStyle = "rgba(90, 180, 255, 0.25)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, minimapConfig.radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.arc(0, 0, minimapConfig.radius * 0.5, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(90, 180, 255, 0.15)";
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.moveTo(-minimapConfig.radius, 0);
+        ctx.lineTo(minimapConfig.radius, 0);
+        ctx.moveTo(0, -minimapConfig.radius);
+        ctx.lineTo(0, minimapConfig.radius);
+        ctx.strokeStyle = "rgba(90, 180, 255, 0.15)";
+        ctx.stroke();
+
+        const playerPos = player.group.getWorldPosition(new THREE.Vector3());
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(player.group.quaternion).normalize();
+        const yaw = Math.atan2(forward.x, forward.z);
+        const cos = Math.cos(-yaw);
+        const sin = Math.sin(-yaw);
+        const scale = minimapConfig.radius / minimapConfig.range;
+
+        const project = (pos) => {
+            const dx = pos.x - playerPos.x;
+            const dz = pos.z - playerPos.z;
+            let rx = dx * cos - dz * sin;
+            let rz = dx * sin + dz * cos;
+            const dist = Math.hypot(rx, rz);
+            if (dist > minimapConfig.range) {
+                const ratio = minimapConfig.range / dist;
+                rx *= ratio;
+                rz *= ratio;
+            }
+            return { x: rx * scale, y: -rz * scale };
+        };
+
+        const lockTarget = targetingSystem.getCurrentTarget();
+
+        world.query().forEach((entity) => {
+            if (!entity?.group || entity === player) return;
+            if (!entity.isEnemy && !entity.isDecoy) return;
+            if (entity.hp !== undefined && entity.hp <= 0) return;
+            const p = project(entity.group.getWorldPosition(new THREE.Vector3()));
+            ctx.beginPath();
+            ctx.fillStyle = entity.isEnemy ? "rgba(255, 120, 120, 0.9)" : "rgba(255, 210, 120, 0.9)";
+            ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (lockTarget && entity === lockTarget) {
+                ctx.strokeStyle = "rgba(180, 240, 255, 0.9)";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        });
+
+        ctx.fillStyle = "rgba(120, 220, 255, 0.95)";
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(6, 8);
+        ctx.lineTo(-6, 8);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(120, 220, 255, 0.65)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.restore();
+    },
+};
+
+const spawnSystem = {
+    afterUpdate: ({ dt, world: currentWorld }) => {
+        if (gameState.result) return;
+        const activeEnemies = currentWorld
+            .query()
+            .filter((entity) => entity?.isEnemy && entity.hp > 0).length;
+
+        if (activeEnemies >= SETTINGS.enemies.spawn.maxActive) return;
+
+        spawnState.timer -= dt;
+        if (spawnState.timer > 0) return;
+
+        spawnEnemy();
+
+        const progress = Math.min(1, gameState.elapsedTime / SETTINGS.gameplay.timeLimit);
+        const interval = SETTINGS.enemies.spawn.baseInterval -
+            progress * (SETTINGS.enemies.spawn.baseInterval - SETTINGS.enemies.spawn.minInterval);
+        spawnState.nextInterval = Math.max(SETTINGS.enemies.spawn.minInterval, interval);
+        spawnState.timer = spawnState.nextInterval;
+    },
+};
+
+const gameStateSystem = {
+    afterUpdate: ({ dt, world: currentWorld }) => {
+        if (gameState.result) return;
+
+        gameState.elapsedTime += dt;
+
+        if (gameState.isRespawning) {
+            gameState.respawnTimer = Math.max(0, gameState.respawnTimer - dt);
+            if (gameState.respawnTimer === 0) {
+                gameState.isRespawning = false;
+                player.hp = player.maxHp;
+                player.shield = player.maxShield;
+                player._deathHandled = false;
+                player.weapons.forEach((weapon) => {
+                    if (typeof weapon.resetDrones === "function") {
+                        weapon.resetDrones();
+                    }
+                });
+                player.group.visible = true;
+                player.group.position.set(0, 0, 0);
+                player.rotation.set(0, 0, 0);
+                player.group.quaternion.setFromEuler(player.rotation);
+                playerMovement.velocity.set(0, 0, 0);
+            }
             return;
         }
 
-        const targetPos = target.group.getWorldPosition(new THREE.Vector3());
-        const projected = targetPos.project(camera);
-        const isInFront = projected.z > -1 && projected.z < 1;
-        if (!isInFront) {
-            lockOnElement.style.display = "none";
+        if (player.hp <= 0) {
+            gameState.lives = Math.max(0, gameState.lives - 1);
+            if (gameState.lives <= 0) {
+                gameState.result = "DEFEAT";
+                return;
+            }
+            gameState.isRespawning = true;
+            gameState.respawnTimer = SETTINGS.gameplay.respawnDelay;
+            player.group.visible = false;
             return;
         }
 
-        const x = (projected.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
-        const y = (-projected.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
-        lockOnElement.style.left = `${x}px`;
-        lockOnElement.style.top = `${y}px`;
-        lockOnElement.style.display = "block";
+        if (gameState.elapsedTime >= SETTINGS.gameplay.timeLimit || gameState.kills >= SETTINGS.gameplay.killTarget) {
+            gameState.result = "VICTORY";
+        }
+
+        const enemies = currentWorld.query().filter((entity) => entity?.isEnemy);
+        if (enemies.length > 0 && enemies.every((enemyEntity) => enemyEntity.hp <= 0)) {
+            gameState.result = "VICTORY";
+        }
     },
 };
 
@@ -614,7 +1032,7 @@ const game = new Game({
     input,
     world,
     hud: hudView,
-    systems: [playerInputSystem, lockOnSystem, weaponSystem, collisionSystem, cameraFollowSystem, lockOnUiSystem],
+    systems: [playerInputSystem, lockOnSystem, collisionSystem, cameraFollowSystem, lockOnUiSystem, minimapSystem, spawnSystem, vfxSystem, gameStateSystem],
 });
 
 function animate(time) {
@@ -628,4 +1046,5 @@ window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    setupMinimap();
 });

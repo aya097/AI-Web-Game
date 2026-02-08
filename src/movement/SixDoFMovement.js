@@ -1,10 +1,11 @@
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
 export class SixDoFMovement {
-    constructor({ maxSpeed = 80, boostMultiplier = 2.0, acceleration = 40 } = {}) {
+    constructor({ maxSpeed = 80, boostMultiplier = 2.0, acceleration = 40, damping = 0.96 } = {}) {
         this.maxSpeed = maxSpeed;
         this.boostMultiplier = boostMultiplier;
         this.acceleration = acceleration;
+        this.damping = damping;
         this.velocity = new THREE.Vector3();
     }
 
@@ -21,6 +22,11 @@ export class SixDoFMovement {
     }
 
     integrate(object3d, input, dt) {
+        const hasInput = input.move.forward !== 0 || input.move.right !== 0 || input.move.up !== 0;
+        if (!hasInput) {
+            const factor = Math.pow(this.damping, dt * 60);
+            this.velocity.multiplyScalar(factor);
+        }
         const max = this.maxSpeed * (input.boost ? this.boostMultiplier : 1);
         if (this.velocity.lengthSq() > max * max) {
             this.velocity.setLength(max);

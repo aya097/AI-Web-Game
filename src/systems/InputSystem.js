@@ -53,10 +53,10 @@ export class InputSystem {
 
     getState() {
         const forward = (this.keys.has("KeyW") ? 1 : 0) + (this.keys.has("KeyS") ? -1 : 0);
-        const right = (this.keys.has("KeyD") ? 1 : 0) + (this.keys.has("KeyA") ? -1 : 0);
+        const right = (this.keys.has("KeyA") ? 1 : 0) + (this.keys.has("KeyD") ? -1 : 0);
         const up = (this.keys.has("Space") ? 1 : 0) + (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") ? -1 : 0);
         const roll = (this.keys.has("KeyE") ? 1 : 0) + (this.keys.has("KeyQ") ? -1 : 0);
-        const boost = this.keys.has("ControlLeft");
+        const boost = this.keys.has("KeyV");
         const fire = this.mouseDown;
         const lockOn = this.keys.has("KeyR");
         const funnel = this.keys.has("KeyF");

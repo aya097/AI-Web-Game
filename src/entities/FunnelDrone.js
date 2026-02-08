@@ -2,6 +2,7 @@ import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
 export class FunnelDrone {
     constructor({ scene, color = 0x6cc5ff, emissive = 0x1e5b7a } = {}) {
+        this.scene = scene;
         this.group = new THREE.Group();
         const bodyMaterial = new THREE.MeshStandardMaterial({
             color,
@@ -103,11 +104,34 @@ export class FunnelDrone {
         this._beamOrigin = new THREE.Vector3();
         this._beamTarget = new THREE.Vector3();
         this._lastPosition = new THREE.Vector3();
+        this._holdTimer = 0;
+        this._time = Math.random() * Math.PI * 2;
 
         if (scene) {
             scene.add(this.group);
             scene.add(this.beam);
         }
+    }
+
+    destroy() {
+        if (this.scene) {
+            this.scene.remove(this.group);
+            this.scene.remove(this.beam);
+            this.trailSegments.forEach((segment) => this.scene.remove(segment));
+        }
+
+        const disposeMesh = (mesh) => {
+            if (!mesh) return;
+            if (mesh.geometry?.dispose) mesh.geometry.dispose();
+            if (mesh.material?.dispose) mesh.material.dispose();
+        };
+
+        this.group.traverse((child) => {
+            if (child.isMesh) disposeMesh(child);
+        });
+        disposeMesh(this.beam);
+        this.trailSegments.forEach((segment) => disposeMesh(segment));
+        this.trailSegments = [];
     }
 
     setHomePosition(position) {
@@ -135,29 +159,59 @@ export class FunnelDrone {
         this._beamTarget.copy(target);
         this._beamTimer = duration;
         this.beam.visible = true;
+        if (this.beam.material) {
+            this.beam.material.opacity = 0.9;
+        }
+        this._holdTimer = Math.max(this._holdTimer, duration * 0.7);
     }
 
     update(dt) {
+        this._time += dt;
         if (this._lastPosition.lengthSq() === 0) {
             this._lastPosition.copy(this.group.position);
+        }
+        if (this.mode === "lock") {
+            this.group.position.copy(this.homePosition);
+            this.group.lookAt(this.homePosition.clone().add(new THREE.Vector3(0, 0, 1)));
+            if (this._beamTimer <= 0) {
+                this.beam.visible = false;
+            }
+            this._trailTimer = 0;
+            this._hideTrail();
+            return;
         }
         if (this.mode === "orbit" && this.targetPosition) {
             this.group.lookAt(this.targetPosition);
         }
         if (this._beamTimer > 0) {
             this._beamTimer = Math.max(0, this._beamTimer - dt);
+            this.beam.visible = true;
             const direction = this._beamTarget.clone().sub(this._beamOrigin).normalize();
             const length = this._beamOrigin.distanceTo(this._beamTarget);
             this.beam.scale.set(1, length, 1);
             this.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
             this.beam.position.copy(this._beamOrigin).add(direction.multiplyScalar(length * 0.5));
+            if (this.beam.material) {
+                const t = Math.max(0.1, this._beamTimer / 0.12);
+                this.beam.material.opacity = 0.9 * t;
+            }
             if (this._beamTimer === 0) {
                 this.beam.visible = false;
             }
         }
 
+        if (this._holdTimer > 0) {
+            this._holdTimer = Math.max(0, this._holdTimer - dt);
+            this._trailTimer = 0;
+            this._hideTrail();
+            return;
+        }
+
         if (this.mode === "dock") {
             this.group.position.lerp(this.homePosition, 1 - Math.exp(-this.lerpSpeed * dt));
+            if (this._beamTimer <= 0) {
+                this.beam.visible = false;
+            }
             this._trailTimer = 0;
             this._hideTrail();
             return;
@@ -168,7 +222,7 @@ export class FunnelDrone {
             this.group.lookAt(this.homePosition);
             this._updateTrail(dt);
             if (this.group.position.distanceTo(this.homePosition) < 0.4) {
-                this.mode = "dock";
+                this.mode = "lock";
             }
             return;
         }
@@ -180,6 +234,9 @@ export class FunnelDrone {
                 Math.sin(this.orbitAngle)
             ).multiplyScalar(this.orbitRadius);
             orbitOffset.y += this.orbitHeight;
+            const wobbleScale = this.wobbleScale ?? 1;
+            const wobble = Math.sin(this._time * 2.4) * 0.18 * wobbleScale;
+            orbitOffset.multiplyScalar(1 + wobble);
             const desired = this.targetPosition.clone().add(orbitOffset);
             this.group.position.lerp(desired, 1 - Math.exp(-this.lerpSpeed * dt));
             this._updateTrail(dt);
@@ -187,6 +244,9 @@ export class FunnelDrone {
     }
 
     _hideTrail() {
+        if (this._beamTimer <= 0) {
+            this.beam.visible = false;
+        }
         this.trailSegments.forEach((segment, index) => {
             segment.visible = false;
             this._trailAges[index] = this._trailMaxAge;

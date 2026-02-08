@@ -12,10 +12,17 @@ export class CollisionSystem {
         const results = [];
 
         for (let i = 0; i < entities.length; i += 1) {
-            for (let j = i + 1; j < entities.length; j += 1) {
-                const a = entities[i];
-                const b = entities[j];
-                const posA = a.group.getWorldPosition(new THREE.Vector3());
+            const a = entities[i];
+            const posA = a.group.getWorldPosition(new THREE.Vector3());
+            const searchRadius = a.colliderRadius + 50;
+            const nearby = typeof world.queryNearby === "function" ? world.queryNearby(posA, searchRadius) : entities;
+
+            for (let j = 0; j < nearby.length; j += 1) {
+                const b = nearby[j];
+                if (!b?.group || typeof b.colliderRadius !== "number") continue;
+                if (b === a) continue;
+                if (b.__worldId <= a.__worldId) continue;
+
                 const posB = b.group.getWorldPosition(new THREE.Vector3());
                 const distSq = posA.distanceToSquared(posB);
                 const radius = a.colliderRadius + b.colliderRadius;

@@ -1,10 +1,11 @@
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
 export class TargetingSystem {
-    constructor({ camera, maxDistance = 300, fovDegrees = 30 } = {}) {
+    constructor({ camera, maxDistance = 300, fovDegrees = 30, lockOffDistance = null } = {}) {
         this.camera = camera;
         this.maxDistance = maxDistance;
         this.fovRadians = THREE.MathUtils.degToRad(fovDegrees);
+        this.lockOffDistance = lockOffDistance ?? maxDistance;
         this.currentTarget = null;
     }
 
@@ -43,6 +44,24 @@ export class TargetingSystem {
 
     getCurrentTarget() {
         return this.currentTarget;
+    }
+
+    update() {
+        const target = this.currentTarget;
+        if (!target?.group || target?.group.visible === false) {
+            this.clear();
+            return;
+        }
+        if (typeof target.hp === "number" && target.hp <= 0) {
+            this.clear();
+            return;
+        }
+        if (!this.camera) return;
+        const origin = this.camera.getWorldPosition(new THREE.Vector3());
+        const distance = target.group.getWorldPosition(new THREE.Vector3()).distanceTo(origin);
+        if (distance > this.lockOffDistance) {
+            this.clear();
+        }
     }
 
     clear() {
