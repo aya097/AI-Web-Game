@@ -30,11 +30,91 @@
             pointer-events: none;
         }
 
-        #overlay span {
-            background: rgba(0, 0, 0, 0.6);
-            padding: 12px 16px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
+        #overlay .overlay-card {
+            background: rgba(0, 0, 0, 0.65);
+            padding: 20px 22px;
+            border: 1px solid rgba(120, 220, 255, 0.35);
+            border-radius: 14px;
+            box-shadow: 0 0 26px rgba(90, 180, 255, 0.25);
+        }
+
+        #overlay .overlay-title {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 0.24em;
+            color: #9fe6ff;
+            margin-bottom: 6px;
+            text-shadow: 0 0 16px rgba(90, 180, 255, 0.6);
+        }
+
+        #overlay .overlay-subtitle {
+            font-size: 11px;
+            letter-spacing: 0.3em;
+            color: rgba(200, 240, 255, 0.75);
+            margin-bottom: 14px;
+        }
+
+        #overlay .overlay-text {
+            font-size: 12px;
+            color: rgba(230, 245, 255, 0.9);
+        }
+
+        #end-screen {
+            position: fixed;
+            inset: 0;
+            display: none;
+            place-items: center;
+            background: rgba(2, 6, 16, 0.82);
+            z-index: 10;
+        }
+
+        #end-screen.visible {
+            display: grid;
+        }
+
+        #end-screen .end-card {
+            min-width: 280px;
+            padding: 24px 28px;
+            border-radius: 16px;
+            border: 1px solid rgba(120, 220, 255, 0.35);
+            background: rgba(5, 12, 25, 0.9);
+            text-align: center;
+            box-shadow: 0 0 30px rgba(90, 180, 255, 0.25);
+        }
+
+        #end-screen .end-title {
+            font-size: 16px;
+            letter-spacing: 0.25em;
+            color: #9fe6ff;
+            margin-bottom: 6px;
+        }
+
+        #end-screen .end-result {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffe08a;
+            text-shadow: 0 0 16px rgba(255, 200, 120, 0.7);
+            margin: 8px 0 16px;
+        }
+
+        #end-screen .end-stats {
+            font-size: 12px;
+            color: rgba(220, 245, 255, 0.9);
+            margin-bottom: 18px;
+            line-height: 1.6;
+        }
+
+        #restart-button {
+            border: none;
+            border-radius: 999px;
+            padding: 10px 22px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: #06101d;
+            background: linear-gradient(135deg, #9fe6ff, #5bb9ff);
+            cursor: pointer;
+            box-shadow: 0 0 16px rgba(90, 180, 255, 0.35);
         }
 
         #ship-bars {
@@ -502,8 +582,27 @@
 </head>
 
 <body>
-    <div id="overlay"><span>クリックでポインターロック開始<br />WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / V
-            ブースト<br />左クリック 射撃 / B ビーム・バズーカ切替 / R ロックオン / F ファンネル<br />敵戦艦2隻破壊で勝利<br />マウスで視点操作</span></div>
+    <div id="overlay">
+        <div class="overlay-card">
+            <div class="overlay-title">GUNFRAME</div>
+            <div class="overlay-subtitle">BATTLELINE 02.08</div>
+            <div class="overlay-text">
+                クリックでポインターロック開始<br />
+                WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / V ブースト<br />
+                左クリック 射撃 / B ビーム・バズーカ切替 / R ロックオン / F ファンネル<br />
+                敵戦艦2隻破壊で勝利<br />
+                マウスで視点操作
+            </div>
+        </div>
+    </div>
+    <div id="end-screen" aria-hidden="true">
+        <div class="end-card">
+            <div class="end-title">GUNFRAME</div>
+            <div class="end-result" data-end="result">RESULT</div>
+            <div class="end-stats" data-end="stats"></div>
+            <button id="restart-button">もう一度遊ぶ</button>
+        </div>
+    </div>
     <div id="ship-bars">
         <div class="title">BATTLESHIPS</div>
         <div class="ship-bar enemy" data-ship="enemy-1"><span class="fill"></span><span class="label">ENEMY 1
