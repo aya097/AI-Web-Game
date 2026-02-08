@@ -65,6 +65,24 @@
             color: rgba(230, 245, 255, 0.9);
         }
 
+        #overlay .overlay-section {
+            margin-top: 10px;
+            text-align: left;
+        }
+
+        #overlay .overlay-section-title {
+            font-size: 10px;
+            letter-spacing: 0.24em;
+            color: rgba(170, 230, 255, 0.85);
+            margin-bottom: 6px;
+        }
+
+        #overlay .overlay-lines {
+            display: grid;
+            gap: 4px;
+            font-size: 12px;
+        }
+
         #end-screen {
             position: fixed;
             inset: 0;
@@ -112,6 +130,13 @@
             line-height: 1.6;
         }
 
+        #end-screen .end-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
         #restart-button {
             border: none;
             border-radius: 999px;
@@ -123,6 +148,19 @@
             background: linear-gradient(135deg, #9fe6ff, #5bb9ff);
             cursor: pointer;
             box-shadow: 0 0 16px rgba(90, 180, 255, 0.35);
+        }
+
+        #title-button {
+            border: 1px solid rgba(120, 220, 255, 0.5);
+            border-radius: 999px;
+            padding: 9px 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: #cfefff;
+            background: rgba(10, 20, 34, 0.7);
+            cursor: pointer;
+            box-shadow: 0 0 14px rgba(90, 180, 255, 0.25);
         }
 
         #ship-bars {
@@ -599,11 +637,22 @@
             <div class="overlay-title">GUNFRAME</div>
             <div class="overlay-subtitle">BATTLELINE 02.08</div>
             <div class="overlay-text">
-                クリックでポインターロック開始<br />
-                WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール / V ブースト<br />
-                左クリック 射撃 / B ビーム・バズーカ切替 / R ロックオン / F ファンネル<br />
-                敵戦艦2隻破壊で勝利<br />
-                マウスで視点操作
+                クリックでポインターロック開始
+                <div class="overlay-section">
+                    <div class="overlay-section-title">操作</div>
+                    <div class="overlay-lines">
+                        <div>WASD 移動 / Space 上昇 / Shift 下降 / Q/E ロール</div>
+                        <div>マウスで視点操作 / V ブースト</div>
+                        <div>左クリック 射撃 / B ビーム・バズーカ切替</div>
+                        <div>R ロックオン / F ファンネル</div>
+                    </div>
+                </div>
+                <div class="overlay-section">
+                    <div class="overlay-section-title">勝利条件</div>
+                    <div class="overlay-lines">
+                        <div>敵戦艦 2 隻を撃破</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -612,7 +661,10 @@
             <div class="end-title">GUNFRAME</div>
             <div class="end-result" data-end="result">RESULT</div>
             <div class="end-stats" data-end="stats"></div>
-            <button id="restart-button">もう一度遊ぶ</button>
+            <div class="end-actions">
+                <button id="restart-button">もう一度遊ぶ</button>
+                <button id="title-button">タイトルへ</button>
+            </div>
         </div>
     </div>
     <div id="ship-bars">

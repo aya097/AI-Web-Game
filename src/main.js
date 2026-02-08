@@ -27,6 +27,7 @@ const endScreen = document.getElementById("end-screen");
 const endResultEl = document.querySelector('[data-end="result"]');
 const endStatsEl = document.querySelector('[data-end="stats"]');
 const restartButton = document.getElementById("restart-button");
+const titleButton = document.getElementById("title-button");
 const hud = document.getElementById("hud");
 const lockOnElement = document.getElementById("lockon");
 const reticleElement = document.getElementById("reticle");
@@ -106,10 +107,27 @@ if (restartButton) {
     });
 }
 
+if (titleButton) {
+    titleButton.addEventListener("click", () => {
+        if (endScreen) {
+            endScreen.classList.remove("visible");
+            endScreen.setAttribute("aria-hidden", "true");
+        }
+        if (overlay) overlay.style.display = "grid";
+    });
+}
+
 window.addEventListener("keydown", (event) => {
     if (!endScreen?.classList.contains("visible")) return;
     if (event.key === "Enter" || event.key.toLowerCase() === "r") {
         window.location.reload();
+    }
+    if (event.key === "Escape" || event.key.toLowerCase() === "t") {
+        if (endScreen) {
+            endScreen.classList.remove("visible");
+            endScreen.setAttribute("aria-hidden", "true");
+        }
+        if (overlay) overlay.style.display = "grid";
     }
 });
 
